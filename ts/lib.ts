@@ -493,7 +493,7 @@ class WEvent {
             default: // DOM_DELTA_PIXEL
         }
         this.dx = Math.round(scale * event.deltaX);
-        this.dy = Math.round(scale * event.deltaY);
+        this.dy = -Math.round(scale * event.deltaY);
         this.timestamp = Math.round(event.timeStamp * 1000);
     }
 }

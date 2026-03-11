@@ -175,118 +175,126 @@ impl InputDevice for XTestDevice {
             return;
         }
 
-        fn map_key(code: &str, location: &KeyboardLocation, shift: bool) -> c_ulong {
-            match (code, location, shift) {
-                ("Escape", _, _) => XK_ESCAPE,
+        fn map_key(code: &str, location: &KeyboardLocation) -> c_ulong {
+            match (code, location) {
+                ("Escape", _) => XK_ESCAPE,
 
                 // Numbers
-                ("Digit0", KeyboardLocation::NUMPAD, _) => XK_KP_0,
-                ("Digit1", KeyboardLocation::NUMPAD, _) => XK_KP_1,
-                ("Digit2", KeyboardLocation::NUMPAD, _) => XK_KP_2,
-                ("Digit3", KeyboardLocation::NUMPAD, _) => XK_KP_3,
-                ("Digit4", KeyboardLocation::NUMPAD, _) => XK_KP_4,
-                ("Digit5", KeyboardLocation::NUMPAD, _) => XK_KP_5,
-                ("Digit6", KeyboardLocation::NUMPAD, _) => XK_KP_6,
-                ("Digit7", KeyboardLocation::NUMPAD, _) => XK_KP_7,
-                ("Digit8", KeyboardLocation::NUMPAD, _) => XK_KP_8,
-                ("Digit9", KeyboardLocation::NUMPAD, _) => XK_KP_9,
-                ("Digit0", _, _) => XK_0,
-                ("Digit1", _, _) => XK_1,
-                ("Digit2", _, _) => XK_2,
-                ("Digit3", _, _) => XK_3,
-                ("Digit4", _, _) => XK_4,
-                ("Digit5", _, _) => XK_5,
-                ("Digit6", _, _) => XK_6,
-                ("Digit7", _, _) => XK_7,
-                ("Digit8", _, _) => XK_8,
-                ("Digit9", _, _) => XK_9,
+                ("Digit0", KeyboardLocation::NUMPAD) => XK_KP_0,
+                ("Digit1", KeyboardLocation::NUMPAD) => XK_KP_1,
+                ("Digit2", KeyboardLocation::NUMPAD) => XK_KP_2,
+                ("Digit3", KeyboardLocation::NUMPAD) => XK_KP_3,
+                ("Digit4", KeyboardLocation::NUMPAD) => XK_KP_4,
+                ("Digit5", KeyboardLocation::NUMPAD) => XK_KP_5,
+                ("Digit6", KeyboardLocation::NUMPAD) => XK_KP_6,
+                ("Digit7", KeyboardLocation::NUMPAD) => XK_KP_7,
+                ("Digit8", KeyboardLocation::NUMPAD) => XK_KP_8,
+                ("Digit9", KeyboardLocation::NUMPAD) => XK_KP_9,
+                ("Digit0", _) => XK_0,
+                ("Digit1", _) => XK_1,
+                ("Digit2", _) => XK_2,
+                ("Digit3", _) => XK_3,
+                ("Digit4", _) => XK_4,
+                ("Digit5", _) => XK_5,
+                ("Digit6", _) => XK_6,
+                ("Digit7", _) => XK_7,
+                ("Digit8", _) => XK_8,
+                ("Digit9", _) => XK_9,
 
                 // Letters - lowercase by default, uppercase when shift is pressed is handled by X11
-                ("KeyA", _, _) => XK_a,
-                ("KeyB", _, _) => XK_b,
-                ("KeyC", _, _) => XK_c,
-                ("KeyD", _, _) => XK_d,
-                ("KeyE", _, _) => XK_e,
-                ("KeyF", _, _) => XK_f,
-                ("KeyG", _, _) => XK_g,
-                ("KeyH", _, _) => XK_h,
-                ("KeyI", _, _) => XK_i,
-                ("KeyJ", _, _) => XK_j,
-                ("KeyK", _, _) => XK_k,
-                ("KeyL", _, _) => XK_l,
-                ("KeyM", _, _) => XK_m,
-                ("KeyN", _, _) => XK_n,
-                ("KeyO", _, _) => XK_o,
-                ("KeyP", _, _) => XK_p,
-                ("KeyQ", _, _) => XK_q,
-                ("KeyR", _, _) => XK_r,
-                ("KeyS", _, _) => XK_s,
-                ("KeyT", _, _) => XK_t,
-                ("KeyU", _, _) => XK_u,
-                ("KeyV", _, _) => XK_v,
-                ("KeyW", _, _) => XK_w,
-                ("KeyX", _, _) => XK_x,
-                ("KeyY", _, _) => XK_y,
-                ("KeyZ", _, _) => XK_z,
+                ("KeyA", _) => XK_a,
+                ("KeyB", _) => XK_b,
+                ("KeyC", _) => XK_c,
+                ("KeyD", _) => XK_d,
+                ("KeyE", _) => XK_e,
+                ("KeyF", _) => XK_f,
+                ("KeyG", _) => XK_g,
+                ("KeyH", _) => XK_h,
+                ("KeyI", _) => XK_i,
+                ("KeyJ", _) => XK_j,
+                ("KeyK", _) => XK_k,
+                ("KeyL", _) => XK_l,
+                ("KeyM", _) => XK_m,
+                ("KeyN", _) => XK_n,
+                ("KeyO", _) => XK_o,
+                ("KeyP", _) => XK_p,
+                ("KeyQ", _) => XK_q,
+                ("KeyR", _) => XK_r,
+                ("KeyS", _) => XK_s,
+                ("KeyT", _) => XK_t,
+                ("KeyU", _) => XK_u,
+                ("KeyV", _) => XK_v,
+                ("KeyW", _) => XK_w,
+                ("KeyX", _) => XK_x,
+                ("KeyY", _) => XK_y,
+                ("KeyZ", _) => XK_z,
 
                 // Function keys
-                ("F1", _, _) => XK_F1,
-                ("F2", _, _) => XK_F2,
-                ("F3", _, _) => XK_F3,
-                ("F4", _, _) => XK_F4,
-                ("F5", _, _) => XK_F5,
-                ("F6", _, _) => XK_F6,
-                ("F7", _, _) => XK_F7,
-                ("F8", _, _) => XK_F8,
-                ("F9", _, _) => XK_F9,
-                ("F10", _, _) => XK_F10,
-                ("F11", _, _) => XK_F11,
-                ("F12", _, _) => XK_F12,
+                ("F1", _) => XK_F1,
+                ("F2", _) => XK_F2,
+                ("F3", _) => XK_F3,
+                ("F4", _) => XK_F4,
+                ("F5", _) => XK_F5,
+                ("F6", _) => XK_F6,
+                ("F7", _) => XK_F7,
+                ("F8", _) => XK_F8,
+                ("F9", _) => XK_F9,
+                ("F10", _) => XK_F10,
+                ("F11", _) => XK_F11,
+                ("F12", _) => XK_F12,
 
                 // Special keys
-                ("Backspace", _, _) => XK_BACKSPACE,
-                ("Tab", _, _) => XK_TAB,
-                ("Enter", KeyboardLocation::NUMPAD, _) => XK_KP_ENTER,
-                ("Enter", _, _) => XK_RETURN,
-                ("Space", _, _) => XK_SPACE,
-                ("CapsLock", _, _) => XK_CAPS_LOCK,
-                ("NumLock", _, _) => XK_NUM_LOCK,
-                ("ScrollLock", _, _) => XK_SCROLL_LOCK,
-                ("Pause", _, _) => XK_PAUSE,
-                ("Insert", _, _) => XK_INSERT,
-                ("Delete", _, _) => XK_DELETE,
-                ("Home", _, _) => XK_HOME,
-                ("End", _, _) => XK_END,
-                ("PageUp", _, _) => XK_PAGE_UP,
-                ("PageDown", _, _) => XK_PAGE_DOWN,
+                ("Backspace", _) => XK_BACKSPACE,
+                ("Tab", _) => XK_TAB,
+                ("Enter", KeyboardLocation::NUMPAD) => XK_KP_ENTER,
+                ("Enter", _) => XK_RETURN,
+                ("Space", _) => XK_SPACE,
+                ("CapsLock", _) => XK_CAPS_LOCK,
+                ("NumLock", _) => XK_NUM_LOCK,
+                ("ScrollLock", _) => XK_SCROLL_LOCK,
+                ("Pause", _) => XK_PAUSE,
+                ("Insert", _) => XK_INSERT,
+                ("Delete", _) => XK_DELETE,
+                ("Home", _) => XK_HOME,
+                ("End", _) => XK_END,
+                ("PageUp", _) => XK_PAGE_UP,
+                ("PageDown", _) => XK_PAGE_DOWN,
+                ("ShiftLeft", _) => XK_SHIFT_L,
+                ("ShiftRight", _) => XK_SHIFT_R,
+                ("ControlLeft", _) => XK_CONTROL_L,
+                ("ControlRight", _) => XK_CONTROL_R,
+                ("AltLeft", _) => XK_ALT_L,
+                ("AltRight", _) => XK_ALT_R,
+                ("MetaLeft", _) => XK_SUPER_L,
+                ("MetaRight", _) => XK_SUPER_R,
 
                 // Arrow keys
-                ("ArrowLeft", _, _) => XK_LEFT,
-                ("ArrowUp", _, _) => XK_UP,
-                ("ArrowRight", _, _) => XK_RIGHT,
-                ("ArrowDown", _, _) => XK_DOWN,
+                ("ArrowLeft", _) => XK_LEFT,
+                ("ArrowUp", _) => XK_UP,
+                ("ArrowRight", _) => XK_RIGHT,
+                ("ArrowDown", _) => XK_DOWN,
 
                 // Punctuation
-                ("Minus", KeyboardLocation::NUMPAD, _) => XK_KP_SUBTRACT,
-                ("Equal", KeyboardLocation::NUMPAD, _) => XK_KP_EQUAL,
-                ("Minus", _, _) => XK_MINUS,
-                ("Equal", _, _) => XK_EQUAL,
-                ("BracketLeft", _, _) => XK_BRACKETLEFT,
-                ("BracketRight", _, _) => XK_BRACKETRIGHT,
-                ("Backslash", _, _) => XK_BACKSLASH,
-                ("Semicolon", _, _) => XK_SEMICOLON,
-                ("Quote", _, _) => XK_APOSTROPHE,
-                ("Backquote", _, _) => XK_GRAVE,
-                ("Comma", _, _) => XK_COMMA,
-                ("Period", _, _) => XK_PERIOD,
-                ("Slash", _, _) => XK_SLASH,
+                ("Minus", KeyboardLocation::NUMPAD) => XK_KP_SUBTRACT,
+                ("Equal", KeyboardLocation::NUMPAD) => XK_KP_EQUAL,
+                ("Minus", _) => XK_MINUS,
+                ("Equal", _) => XK_EQUAL,
+                ("BracketLeft", _) => XK_BRACKETLEFT,
+                ("BracketRight", _) => XK_BRACKETRIGHT,
+                ("Backslash", _) => XK_BACKSLASH,
+                ("Semicolon", _) => XK_SEMICOLON,
+                ("Quote", _) => XK_APOSTROPHE,
+                ("Backquote", _) => XK_GRAVE,
+                ("Comma", _) => XK_COMMA,
+                ("Period", _) => XK_PERIOD,
+                ("Slash", _) => XK_SLASH,
 
                 // Numpad
-                ("NumpadMultiply", _, _) => XK_KP_MULTIPLY,
-                ("NumpadAdd", _, _) => XK_KP_ADD,
-                ("NumpadSubtract", _, _) => XK_KP_SUBTRACT,
-                ("NumpadDecimal", _, _) => XK_KP_DECIMAL,
-                ("NumpadDivide", _, _) => XK_KP_DIVIDE,
+                ("NumpadMultiply", _) => XK_KP_MULTIPLY,
+                ("NumpadAdd", _) => XK_KP_ADD,
+                ("NumpadSubtract", _) => XK_KP_SUBTRACT,
+                ("NumpadDecimal", _) => XK_KP_DECIMAL,
+                ("NumpadDivide", _) => XK_KP_DIVIDE,
 
                 // Unknown key
                 _ => {
@@ -296,47 +304,15 @@ impl InputDevice for XTestDevice {
             }
         }
 
-        let key_code = map_key(&event.code, &event.location, event.shift);
+        let key_code = map_key(&event.code, &event.location);
         let is_press = match event.event_type {
             KeyboardEventType::UP => false,
             KeyboardEventType::DOWN => true,
             KeyboardEventType::REPEAT => true, // Treat repeat as press
         };
 
-        // Send modifier keys first (for DOWN events)
-        if is_press {
-            if event.shift {
-                self.send_key(XK_SHIFT_L, true);
-            }
-            if event.ctrl {
-                self.send_key(XK_CONTROL_L, true);
-            }
-            if event.alt {
-                self.send_key(XK_ALT_L, true);
-            }
-            if event.meta {
-                self.send_key(XK_SUPER_L, true);
-            }
-        }
-
         // Send the main key
         self.send_key(key_code, is_press);
-
-        // Release modifier keys (for UP events)
-        if !is_press {
-            if event.shift {
-                self.send_key(XK_SHIFT_L, false);
-            }
-            if event.ctrl {
-                self.send_key(XK_CONTROL_L, false);
-            }
-            if event.alt {
-                self.send_key(XK_ALT_L, false);
-            }
-            if event.meta {
-                self.send_key(XK_SUPER_L, false);
-            }
-        }
 
         // Flush to ensure events are sent
         unsafe {
