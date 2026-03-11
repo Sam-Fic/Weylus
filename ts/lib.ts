@@ -2,6 +2,14 @@ interface Window {
     ManagedMediaSource: any;
 }
 
+type PointerEventWithCoalescedEvents = PointerEvent & {
+    getCoalescedEvents?: () => PointerEvent[];
+};
+
+type HTMLVideoElementWithRemotePlayback = HTMLVideoElement & {
+    disableRemotePlayback?: boolean;
+};
+
 enum LogLevel {
     ERROR = 0,
     WARN,
@@ -92,6 +100,34 @@ function fresh_canvas() {
     canvas_old.classList.forEach((cls) => canvas.classList.add(cls));
     canvas_old.replaceWith(canvas);
     return canvas;
+}
+
+function getPointerEvents(event: PointerEvent): PointerEvent[] {
+    const coalescedEvent = event as PointerEventWithCoalescedEvents;
+    if (typeof coalescedEvent.getCoalescedEvents === "function") {
+        return coalescedEvent.getCoalescedEvents();
+    }
+    return [event];
+}
+
+function capturePointer(event: PointerEvent) {
+    const target = event.currentTarget;
+    if (target instanceof Element) {
+        try {
+            target.setPointerCapture(event.pointerId);
+        } catch (_err) {
+        }
+    }
+}
+
+function releasePointer(event: PointerEvent) {
+    const target = event.currentTarget;
+    if (target instanceof Element && target.hasPointerCapture(event.pointerId)) {
+        try {
+            target.releasePointerCapture(event.pointerId);
+        } catch (_err) {
+        }
+    }
 }
 
 class Rect {
@@ -669,7 +705,7 @@ class Painter {
 
     onmove(event: PointerEvent) {
         if (this.lines_active.has(event.pointerId)) {
-            const events = typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [event];
+            const events = getPointerEvents(event);
             for (const e of events) {
                 this.appendEventToLine(e);
             }
@@ -736,9 +772,11 @@ class PointerHandler {
         canvas.ontouchmove = (e) => e.preventDefault();
 
         for (let elem of [video, canvas]) {
-            elem.onwheel = (e) => {
+            elem.addEventListener("wheel", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 this.webSocket.send(JSON.stringify({ "WheelEvent": new WEvent(e) }));
-            }
+            }, { passive: false });
         }
     }
 
@@ -803,8 +841,14 @@ class PointerHandler {
             }
         }
         if (this.pointerTypes.includes(event.pointerType)) {
-            let rect = (event.target as HTMLElement).getBoundingClientRect();
-            const events = event_type === "pointermove" && typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [event];
+            const currentTarget = event.currentTarget as HTMLElement;
+            let rect = currentTarget.getBoundingClientRect();
+            const events = event_type === "pointermove" ? getPointerEvents(event) : [event];
+            if (event_type === "pointerdown") {
+                capturePointer(event);
+            } else if (event_type === "pointerup" || event_type === "pointercancel") {
+                releasePointer(event);
+            }
             for (let event of events) {
                 this.webSocket.send(
                     JSON.stringify(
@@ -818,6 +862,8 @@ class PointerHandler {
                     )
                 );
             }
+            event.preventDefault();
+            event.stopPropagation();
             if (settings.visible) {
                 settings.toggle();
             }
@@ -1083,7 +1129,7 @@ function init() {
         settings.send_server_config();
     }
     video.controls = false;
-    video.disableRemotePlayback = true;
+    (video as HTMLVideoElementWithRemotePlayback).disableRemotePlayback = true;
     video.onloadeddata = () => stretch_video();
     let is_connected = false;
     handle_messages(webSocket, video, () => {
