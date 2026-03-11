@@ -1,17 +1,21 @@
-use std::os::raw::c_ulong;
+use std::os::raw::{c_uint, c_ulong};
 use std::ptr;
 
 use crate::capturable::Capturable;
 use crate::input::device::{InputDevice, InputDeviceType};
 use crate::protocol::{
-    KeyboardEvent, KeyboardEventType, KeyboardLocation, PointerEvent, WheelEvent,
+    Button, KeyboardEvent, KeyboardEventType, KeyboardLocation, PointerEvent, PointerEventType,
+    PointerType, WheelEvent,
 };
 
 use tracing::{debug, warn};
 
 // X11 bindings
-use x11::xlib::{Display, False, True, XCloseDisplay, XFlush, XKeysymToKeycode, XOpenDisplay, XSync};
-use x11::xtest::{XTestFakeKeyEvent, XTestQueryExtension};
+use x11::xlib::{
+    Display, False, True, XCloseDisplay, XDefaultScreen, XDisplayHeight, XDisplayWidth, XFlush,
+    XKeysymToKeycode, XOpenDisplay, XSync,
+};
+use x11::xtest::{XTestFakeButtonEvent, XTestFakeKeyEvent, XTestFakeMotionEvent, XTestQueryExtension};
 
 pub struct XTestDevice {
     display: *mut Display,
@@ -79,6 +83,75 @@ impl XTestDevice {
                 0, // CurrentTime
             );
             XFlush(self.display);
+        }
+    }
+
+    fn screen_coordinates(&self, x: f64, y: f64) -> Option<(i32, i32)> {
+        let (x_rel, y_rel, width_rel, height_rel) = match self.capturable.geometry().ok()? {
+            crate::capturable::Geometry::Relative(x, y, width, height) => (x, y, width, height),
+        };
+
+        unsafe {
+            let screen = XDefaultScreen(self.display);
+            let width = XDisplayWidth(self.display, screen);
+            let height = XDisplayHeight(self.display, screen);
+            if width <= 0 || height <= 0 {
+                return None;
+            }
+
+            let x = ((x * width_rel + x_rel) * width as f64).round() as i32;
+            let y = ((y * height_rel + y_rel) * height as f64).round() as i32;
+
+            Some((x.clamp(0, width - 1), y.clamp(0, height - 1)))
+        }
+    }
+
+    fn move_pointer(&mut self, x: f64, y: f64) {
+        let Some((x, y)) = self.screen_coordinates(x, y) else {
+            warn!("Failed to determine target coordinates for XTest pointer event");
+            return;
+        };
+
+        unsafe {
+            let screen = XDefaultScreen(self.display);
+            XTestFakeMotionEvent(self.display, screen, x, y, 0);
+            XFlush(self.display);
+        }
+    }
+
+    fn button_number(button: Button) -> Option<c_uint> {
+        match button {
+            Button::PRIMARY => Some(1),
+            Button::AUXILARY => Some(2),
+            Button::SECONDARY => Some(3),
+            Button::FOURTH => Some(8),
+            Button::FIFTH => Some(9),
+            _ => None,
+        }
+    }
+
+    fn send_button(&mut self, button: c_uint, is_press: bool) {
+        unsafe {
+            XTestFakeButtonEvent(
+                self.display,
+                button,
+                if is_press { True } else { False },
+                0,
+            );
+            XFlush(self.display);
+        }
+    }
+
+    fn release_all_mouse_buttons(&mut self) {
+        for button in [1, 2, 3, 8, 9] {
+            self.send_button(button, false);
+        }
+    }
+
+    fn click_button(&mut self, button: c_uint, repeat: u32) {
+        for _ in 0..repeat {
+            self.send_button(button, true);
+            self.send_button(button, false);
         }
     }
 }
@@ -271,16 +344,63 @@ impl InputDevice for XTestDevice {
         }
     }
 
-    fn send_pointer_event(&mut self, _event: &PointerEvent) {
-        // XTest can also handle pointer events, but we'll leave this
-        // as a simple implementation for now
-        warn!("XTest pointer events not implemented, use uinput instead");
+    fn send_pointer_event(&mut self, event: &PointerEvent) {
+        if !event.is_primary && !matches!(event.pointer_type, PointerType::Mouse) {
+            return;
+        }
+
+        if let Err(err) = self.capturable.before_input() {
+            warn!("Failed to activate window, sending no input ({})", err);
+            return;
+        }
+
+        match event.event_type {
+            PointerEventType::MOVE | PointerEventType::OVER | PointerEventType::ENTER => {
+                self.move_pointer(event.x, event.y);
+            }
+            PointerEventType::DOWN => {
+                self.move_pointer(event.x, event.y);
+                if let Some(button) = Self::button_number(event.button) {
+                    self.send_button(button, true);
+                }
+            }
+            PointerEventType::UP => {
+                self.move_pointer(event.x, event.y);
+                if let Some(button) = Self::button_number(event.button) {
+                    self.send_button(button, false);
+                }
+            }
+            PointerEventType::CANCEL | PointerEventType::LEAVE | PointerEventType::OUT => {
+                self.release_all_mouse_buttons();
+            }
+        }
+
+        unsafe {
+            XSync(self.display, False);
+        }
     }
 
-    fn send_wheel_event(&mut self, _event: &WheelEvent) {
-        // XTest can also handle wheel events, but we'll leave this
-        // as a simple implementation for now
-        warn!("XTest wheel events not implemented, use uinput instead");
+    fn send_wheel_event(&mut self, event: &WheelEvent) {
+        if let Err(err) = self.capturable.before_input() {
+            warn!("Failed to activate window, sending no input ({})", err);
+            return;
+        }
+
+        if event.dy > 0 {
+            self.click_button(4, 1);
+        } else if event.dy < 0 {
+            self.click_button(5, 1);
+        }
+
+        if event.dx > 0 {
+            self.click_button(6, 1);
+        } else if event.dx < 0 {
+            self.click_button(7, 1);
+        }
+
+        unsafe {
+            XSync(self.display, False);
+        }
     }
 
     fn set_capturable(&mut self, capturable: Box<dyn Capturable>) {
