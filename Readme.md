@@ -191,6 +191,10 @@ Current limitations:
 - KMS cursor plane capture is not implemented yet
 - access to `/dev/dri/card*` is required and some drivers still require `CAP_SYS_ADMIN`
 
+For a verified `lightdm + Xorg :0 + arise` deployment note, including why KMS is not usable on that
+machine and how to target the display manager through X11 instead, see
+[`docs/DM_REMOTE_CONTROL_ARISE.md`](docs/DM_REMOTE_CONTROL_ARISE.md).
+
 #### Hardware Acceleration
 On Linux Weylus supports hardware accelerated video encoding through the Video Acceleration API
 (VAAPI) or Nvidia's NVENC. By default hardware acceleration is disabled as quality and stability of
