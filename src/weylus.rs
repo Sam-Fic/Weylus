@@ -26,9 +26,9 @@ impl Weylus {
         mut on_web_message: impl FnMut(Web2UiMessage) + Send + 'static,
     ) -> bool {
         let encoder_options = EncoderOptions {
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", feature = "vaapi"))]
             try_vaapi: config.try_vaapi,
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(all(target_os = "linux", feature = "vaapi")))]
             try_vaapi: false,
 
             #[cfg(any(target_os = "linux", target_os = "windows"))]
@@ -70,6 +70,10 @@ impl Weylus {
                 encoder_options,
                 #[cfg(target_os = "linux")]
                 wayland_support: config.wayland_support,
+                #[cfg(target_os = "linux")]
+                kms_support: config.kms_support,
+                #[cfg(target_os = "linux")]
+                kms_device: config.kms_device.clone(),
                 no_gui: config.no_gui,
             },
         );

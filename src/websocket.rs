@@ -43,6 +43,11 @@ where
     }
 }
 
+#[cfg(target_os = "linux")]
+fn has_x_display() -> bool {
+    std::env::var_os("DISPLAY").is_some()
+}
+
 pub struct WeylusClientHandler<S, R, FnUInput> {
     sender: S,
     receiver: Option<R>,
@@ -57,11 +62,15 @@ pub struct WeylusClientHandler<S, R, FnUInput> {
     video_thread: JoinHandle<()>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct WeylusClientConfig {
     pub encoder_options: EncoderOptions,
     #[cfg(target_os = "linux")]
     pub wayland_support: bool,
+    #[cfg(target_os = "linux")]
+    pub kms_support: bool,
+    #[cfg(target_os = "linux")]
+    pub kms_device: Option<String>,
     pub no_gui: bool,
 }
 
@@ -200,6 +209,10 @@ impl<S, R, FnUInput> WeylusClientHandler<S, R, FnUInput> {
             self.config.wayland_support,
             #[cfg(target_os = "linux")]
             self.capture_cursor,
+            #[cfg(target_os = "linux")]
+            self.config.kms_support,
+            #[cfg(target_os = "linux")]
+            self.config.kms_device.as_deref(),
         );
         self.capturables.iter().for_each(|c| {
             windows.push(c.name());
@@ -220,6 +233,11 @@ impl<S, R, FnUInput> WeylusClientHandler<S, R, FnUInput> {
         };
         if config.capturable_id < self.capturables.len() {
             let capturable = self.capturables[config.capturable_id].clone();
+            debug!(
+                "Selected capturable[{}]: {}",
+                config.capturable_id,
+                capturable.name()
+            );
 
             #[cfg(target_os = "linux")]
             {
@@ -251,10 +269,11 @@ impl<S, R, FnUInput> WeylusClientHandler<S, R, FnUInput> {
                                 }
                                 Err(xtest_err) => {
                                     error!("Failed to create XTest device: {}", xtest_err);
-                                    self.send_message(MessageOutbound::ConfigError(
-                                        format!("Failed to create input device! uinput: {}, xtest: {}", e, xtest_err),
-                                    ));
-                                    return;
+                                    self.input_device = None;
+                                    self.send_message(MessageOutbound::Error(format!(
+                                        "Input disabled: failed to create input device (uinput: {}, xtest: {})",
+                                        e, xtest_err
+                                    )));
                                 }
                             }
                         }
@@ -274,10 +293,24 @@ impl<S, R, FnUInput> WeylusClientHandler<S, R, FnUInput> {
                             self.input_device = Some(Box::new(xtest_device));
                         }
                         Err(e) => {
-                            debug!("XTest not available ({}), falling back to AutoPilot", e);
-                            self.input_device = Some(Box::new(
-                                crate::input::autopilot_device::AutoPilotDevice::new(capturable.clone()),
-                            ));
+                            if has_x_display() {
+                                debug!("XTest not available ({}), falling back to AutoPilot", e);
+                                self.input_device = Some(Box::new(
+                                    crate::input::autopilot_device::AutoPilotDevice::new(
+                                        capturable.clone(),
+                                    ),
+                                ));
+                            } else {
+                                warn!(
+                                    "XTest not available ({}), DISPLAY is unset; continuing without input backend",
+                                    e
+                                );
+                                self.input_device = None;
+                                self.send_message(MessageOutbound::Error(
+                                    "Input disabled: no usable Linux input backend is available."
+                                        .to_string(),
+                                ));
+                            }
                         }
                     }
                 } else if let Some(d) = self.input_device.as_mut() {

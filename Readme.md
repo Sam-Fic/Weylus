@@ -169,6 +169,28 @@ There are still some things that do not work:
 - displaying proper window names
 - capturing the cursor
 
+#### KMS/DRM
+On Linux Weylus also supports direct framebuffer capture through DRM/KMS. This is useful on
+systems without a working X11 session or without PipeWire screen casting.
+
+Enable it with the GUI checkbox `KMS/DRM Support` or start Weylus with:
+
+```sh
+weylus --kms-support
+```
+
+To restrict probing to a specific card, use for example:
+
+```sh
+weylus --kms-support --kms-device /dev/dri/card0
+```
+
+Current limitations:
+- only full-output capture is supported
+- only linear framebuffers in common 16/32-bit formats are supported
+- KMS cursor plane capture is not implemented yet
+- access to `/dev/dri/card*` is required and some drivers still require `CAP_SYS_ADMIN`
+
 #### Hardware Acceleration
 On Linux Weylus supports hardware accelerated video encoding through the Video Acceleration API
 (VAAPI) or Nvidia's NVENC. By default hardware acceleration is disabled as quality and stability of

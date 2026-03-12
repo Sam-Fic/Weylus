@@ -121,6 +121,17 @@ pub struct Config {
     #[arg(long, help = "Wayland/PipeWire Support.")]
     #[serde(default)]
     pub wayland_support: bool,
+    #[cfg(target_os = "linux")]
+    #[arg(long, help = "Enable direct DRM/KMS framebuffer capture.")]
+    #[serde(default)]
+    pub kms_support: bool,
+    #[cfg(target_os = "linux")]
+    #[arg(
+        long,
+        help = "Limit KMS capture to a specific DRM device path, for example /dev/dri/card0."
+    )]
+    #[serde(default)]
+    pub kms_device: Option<String>,
 
     #[arg(long, help = "Print template of index.html served by Weylus.")]
     #[serde(skip)]

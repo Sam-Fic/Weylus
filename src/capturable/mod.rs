@@ -1,9 +1,11 @@
 use std::boxed::Box;
 use std::error::Error;
-use tracing::warn;
+use tracing::{debug, warn};
 
 #[cfg(target_os = "macos")]
 pub mod core_graphics;
+#[cfg(target_os = "linux")]
+pub mod kms;
 #[cfg(target_os = "linux")]
 pub mod pipewire;
 #[cfg(target_os = "linux")]
@@ -66,6 +68,8 @@ impl Clone for Box<dyn Capturable> {
 pub fn get_capturables(
     #[cfg(target_os = "linux")] wayland_support: bool,
     #[cfg(target_os = "linux")] capture_cursor: bool,
+    #[cfg(target_os = "linux")] kms_support: bool,
+    #[cfg(target_os = "linux")] kms_device: Option<&str>,
 ) -> Vec<Box<dyn Capturable>> {
     let mut capturables: Vec<Box<dyn Capturable>> = vec![];
     #[cfg(target_os = "linux")]
@@ -82,6 +86,18 @@ pub fn get_capturables(
                     "Failed to get list of capturables via dbus/pipewire: {}",
                     err
                 ),
+            }
+        }
+
+        if kms_support {
+            use crate::capturable::kms::get_capturables as get_capturables_kms;
+            match get_capturables_kms(kms_device) {
+                Ok(captrs) => {
+                    for c in captrs {
+                        capturables.push(Box::new(c));
+                    }
+                }
+                Err(err) => warn!("Failed to get list of capturables via KMS: {}", err),
             }
         }
 
@@ -158,6 +174,12 @@ pub fn get_capturables(
                     pixel_format,
                 }));
             }
+        }
+    }
+
+    if crate::log::get_log_level() >= tracing::Level::DEBUG {
+        for (index, capturable) in capturables.iter().enumerate() {
+            debug!("Capturable[{index}]: {}", capturable.name());
         }
     }
 

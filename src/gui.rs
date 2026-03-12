@@ -110,12 +110,22 @@ pub fn run(config: &Config, log_receiver: mpsc::Receiver<String>) {
         .right_of(&check_auto_start, 3 * padding)
         .with_label("Wayland/\nPipeWire\nSupport");
     #[cfg(target_os = "linux")]
+    let mut check_kms = CheckButton::default()
+        .with_size(70, height)
+        .right_of(&check_wayland, 2 * padding)
+        .with_label("KMS/\nDRM\nSupport");
+    #[cfg(target_os = "linux")]
     {
         check_wayland.set_tooltip(
             "EXPERIMENTAL! This may crash your desktop! Enables screen \
         capturing for Wayland using PipeWire and GStreamer.",
         );
         check_wayland.set_checked(config.wayland_support);
+        check_kms.set_tooltip(
+            "Enable direct framebuffer capture through DRM/KMS. This usually requires access to \
+        /dev/dri/card* and may need CAP_SYS_ADMIN depending on the driver.",
+        );
+        check_kms.set_checked(config.kms_support);
     }
 
     let mut label_hw_accel = Frame::default()
@@ -135,9 +145,17 @@ pub fn run(config: &Config, log_receiver: mpsc::Receiver<String>) {
     #[cfg(target_os = "linux")]
     {
         check_native_hw_accel.set_label("VAAPI");
-        check_native_hw_accel
-            .set_tooltip("Try to use hardware acceleration through the Video Acceleration API.");
-        check_native_hw_accel.set_checked(config.try_vaapi);
+        if cfg!(feature = "vaapi") {
+            check_native_hw_accel
+                .set_tooltip("Try to use hardware acceleration through the Video Acceleration API.");
+            check_native_hw_accel.set_checked(config.try_vaapi);
+        } else {
+            check_native_hw_accel.set_tooltip(
+                "This build was compiled without VAAPI support. Rebuild with --features vaapi to enable it.",
+            );
+            check_native_hw_accel.set_checked(false);
+            check_native_hw_accel.deactivate();
+        }
     }
 
     #[cfg(target_os = "macos")]
@@ -255,8 +273,10 @@ pub fn run(config: &Config, log_receiver: mpsc::Receiver<String>) {
                     config.gui_theme = Some(ThemeType::from_index(choice_theme.value()));
                     #[cfg(target_os = "linux")]
                     {
-                        config.try_vaapi = check_native_hw_accel.is_checked();
+                        config.try_vaapi = cfg!(feature = "vaapi")
+                            && check_native_hw_accel.is_checked();
                         config.wayland_support = check_wayland.is_checked();
+                        config.kms_support = check_kms.is_checked();
                     }
                     #[cfg(any(target_os = "linux", target_os = "windows"))]
                     {
