@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::collections::HashMap;
 use std::error::Error;
 use std::os::unix::io::AsRawFd;
@@ -28,6 +29,7 @@ use crate::capturable::remote_desktop_dbus::{
 struct PwStreamInfo {
     path: u64,
     source_type: u64,
+    size: Option<(i32, i32)>,
 }
 
 #[derive(Debug)]
@@ -55,22 +57,64 @@ impl std::fmt::Display for GStreamerError {
 impl Error for GStreamerError {}
 
 #[derive(Clone)]
+pub struct PortalRemoteDesktopSession {
+    dbus_conn: Arc<SyncConnection>,
+    session: dbus::Path<'static>,
+    devices: u32,
+}
+
+impl PortalRemoteDesktopSession {
+    pub fn connection(&self) -> Arc<SyncConnection> {
+        self.dbus_conn.clone()
+    }
+
+    pub fn session_handle(&self) -> dbus::Path<'static> {
+        self.session.clone()
+    }
+
+    pub fn devices(&self) -> u32 {
+        self.devices
+    }
+}
+
+#[derive(Clone)]
 pub struct PipeWireCapturable {
     // connection needs to be kept alive for recording
     dbus_conn: Arc<SyncConnection>,
     fd: OwnedFd,
     path: u64,
     source_type: u64,
+    size: Option<(i32, i32)>,
+    portal_session: Option<PortalRemoteDesktopSession>,
 }
 
 impl PipeWireCapturable {
-    fn new(conn: Arc<SyncConnection>, fd: OwnedFd, stream: PwStreamInfo) -> Self {
+    fn new(
+        conn: Arc<SyncConnection>,
+        fd: OwnedFd,
+        portal_session: Option<PortalRemoteDesktopSession>,
+        stream: PwStreamInfo,
+    ) -> Self {
         Self {
             dbus_conn: conn,
             fd,
             path: stream.path,
             source_type: stream.source_type,
+            size: stream.size,
+            portal_session,
         }
+    }
+
+    pub fn portal_session(&self) -> Option<PortalRemoteDesktopSession> {
+        self.portal_session.clone()
+    }
+
+    pub fn stream_id(&self) -> Option<u32> {
+        u32::try_from(self.path).ok()
+    }
+
+    pub fn logical_size(&self) -> Option<(i32, i32)> {
+        self.size
     }
 }
 
@@ -88,6 +132,10 @@ impl std::fmt::Debug for PipeWireCapturable {
 }
 
 impl Capturable for PipeWireCapturable {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
     fn name(&self) -> String {
         let type_str = match self.source_type {
             1 => "Desktop",
@@ -345,6 +393,12 @@ fn streams_from_response(response: &OrgFreedesktopPortalRequestResponse) -> Vec<
                         source_type: attributes
                             .get("source_type")
                             .map_or(Some(0), |v| v.as_u64())?,
+                        size: attributes.get("size").and_then(|value| {
+                            let mut iter = value.as_iter()?;
+                            let width = iter.next()?.as_i64()? as i32;
+                            let height = iter.next()?.as_i64()? as i32;
+                            Some((width, height))
+                        }),
                     })
                 })
                 .collect::<Vec<PwStreamInfo>>(),
@@ -362,6 +416,7 @@ struct CallBackContext {
     fd: Option<OwnedFd>,
     restore_token: Option<String>,
     has_remote_desktop: bool,
+    devices: u32,
     failure: bool,
 }
 
@@ -534,7 +589,9 @@ fn on_start_response(
             let _ = std::fs::write(&path, t);
         }
     }
-    dbg!(&context.restore_token);
+    if let Some(devices) = r.results.get("devices").and_then(|v| v.as_u64()) {
+        context.devices = devices as u32;
+    }
     if context.has_remote_desktop {
         debug!("Remote Desktop Session started");
     } else {
@@ -545,7 +602,15 @@ fn on_start_response(
 
 fn request_remote_desktop(
     capture_cursor: bool,
-) -> Result<(SyncConnection, OwnedFd, Vec<PwStreamInfo>), Box<dyn Error>> {
+) -> Result<
+    (
+        SyncConnection,
+        OwnedFd,
+        Vec<PwStreamInfo>,
+        Option<(dbus::Path<'static>, u32)>,
+    ),
+    Box<dyn Error>,
+> {
     let conn = SyncConnection::new_session()?;
     let portal = get_portal(&conn);
 
@@ -565,6 +630,7 @@ fn request_remote_desktop(
         fd: None,
         restore_token: restore_token_path,
         has_remote_desktop,
+        devices: 0,
         failure: false,
     };
     let context = Arc::new(Mutex::new(context));
@@ -602,7 +668,17 @@ fn request_remote_desktop(
     }
     let context = context.lock().unwrap();
     if context.fd.is_some() && !context.streams.is_empty() {
-        Ok((conn, context.fd.clone().unwrap(), context.streams.clone()))
+        let remote_desktop = if context.has_remote_desktop {
+            Some((context.session.clone(), context.devices))
+        } else {
+            None
+        };
+        Ok((
+            conn,
+            context.fd.clone().unwrap(),
+            context.streams.clone(),
+            remote_desktop,
+        ))
     } else {
         Err(Box::new(DBusError(
             "Failed to obtain screen capture.".into(),
@@ -611,10 +687,15 @@ fn request_remote_desktop(
 }
 
 pub fn get_capturables(capture_cursor: bool) -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
-    let (conn, fd, streams) = request_remote_desktop(capture_cursor)?;
+    let (conn, fd, streams, remote_desktop) = request_remote_desktop(capture_cursor)?;
     let conn = Arc::new(conn);
+    let portal_session = remote_desktop.map(|(session, devices)| PortalRemoteDesktopSession {
+        dbus_conn: conn.clone(),
+        session,
+        devices,
+    });
     Ok(streams
         .into_iter()
-        .map(|s| PipeWireCapturable::new(conn.clone(), fd.clone(), s))
+        .map(|s| PipeWireCapturable::new(conn.clone(), fd.clone(), portal_session.clone(), s))
         .collect())
 }

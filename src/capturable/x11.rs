@@ -1,6 +1,7 @@
 use crate::capturable::{Capturable, Geometry, Recorder};
 use crate::cerror::CError;
 use crate::video::PixelProvider;
+use std::any::Any;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_float, c_int, c_uint, c_void};
 use std::slice::from_raw_parts;
@@ -87,6 +88,10 @@ impl X11Capturable {
 }
 
 impl Capturable for X11Capturable {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
     fn name(&self) -> String {
         unsafe {
             CStr::from_ptr(get_capturable_name(self.handle))

@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::boxed::Box;
 use std::error::Error;
 use tracing::{debug, warn};
@@ -45,6 +46,8 @@ pub enum Geometry {
 }
 
 pub trait Capturable: Send + BoxCloneCapturable {
+    fn as_any(&self) -> &dyn Any;
+
     /// Name of the Capturable, for example the window title, if it is a window.
     fn name(&self) -> String;
 

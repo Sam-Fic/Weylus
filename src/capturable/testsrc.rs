@@ -1,5 +1,6 @@
 use crate::capturable::{Capturable, Geometry, Recorder};
 use crate::video::PixelProvider;
+use std::any::Any;
 use std::error::Error;
 
 #[derive(Debug, Clone, Copy)]
@@ -62,6 +63,10 @@ impl TestRecorder {
 }
 
 impl Capturable for TestCapturable {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
     fn name(&self) -> String {
         format!(
             "Test Source {}x{}@{:?}",

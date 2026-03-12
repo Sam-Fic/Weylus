@@ -48,6 +48,14 @@ fn has_x_display() -> bool {
     std::env::var_os("DISPLAY").is_some()
 }
 
+#[cfg(target_os = "linux")]
+fn try_wayland_portal_input_device(
+    capturable: Box<dyn Capturable>,
+) -> Result<Box<dyn InputDevice>, String> {
+    crate::input::wayland_portal_device::WaylandPortalDevice::new(capturable)
+        .map(|device| Box::new(device) as Box<dyn InputDevice>)
+}
+
 pub struct WeylusClientHandler<S, R, FnUInput> {
     sender: S,
     receiver: Option<R>,
@@ -245,76 +253,112 @@ impl<S, R, FnUInput> WeylusClientHandler<S, R, FnUInput> {
             }
 
             #[cfg(target_os = "linux")]
-            if config.uinput_support {
-                if self.input_device.as_ref().map_or(true, |d| {
-                    client_name_changed || d.device_type() != InputDeviceType::UInputDevice
-                }) {
-                    let device = crate::input::uinput_device::UInputDevice::new(
-                        capturable.clone(),
-                        &self.client_name,
-                    );
-                    match device {
-                        Ok(d) => self.input_device = Some(Box::new(d)),
-                        Err(e) => {
-                            error!("Failed to create uinput device: {}", e);
-                            if let CErrorCode::UInputNotAccessible = e.to_enum() {
-                                (self.on_uinput_inaccessible)();
+            {
+                let mut portal_selected = false;
+                if crate::input::wayland_portal_device::WaylandPortalDevice::supports_capturable(
+                    capturable.as_ref(),
+                ) {
+                    if self.input_device.as_ref().map_or(true, |d| {
+                        client_name_changed
+                            || d.device_type() != InputDeviceType::WaylandPortalDevice
+                    }) {
+                        match try_wayland_portal_input_device(capturable.clone()) {
+                            Ok(device) => {
+                                debug!("Using Wayland portal RemoteDesktop device for input");
+                                self.input_device = Some(device);
+                                portal_selected = true;
                             }
-                            // Try to fall back to XTest
-                            debug!("Attempting to use XTest as fallback");
-                            match crate::input::xtest_device::XTestDevice::new(capturable.clone()) {
-                                Ok(xtest_device) => {
-                                    debug!("Successfully created XTest device as fallback");
-                                    self.input_device = Some(Box::new(xtest_device));
-                                }
-                                Err(xtest_err) => {
-                                    error!("Failed to create XTest device: {}", xtest_err);
-                                    self.input_device = None;
-                                    self.send_message(MessageOutbound::Error(format!(
-                                        "Input disabled: failed to create input device (uinput: {}, xtest: {})",
-                                        e, xtest_err
-                                    )));
-                                }
-                            }
-                        }
-                    }
-                } else if let Some(d) = self.input_device.as_mut() {
-                    d.set_capturable(capturable.clone());
-                }
-            } else {
-                // When uinput_support is false, try XTest first, then fall back to AutoPilot
-                if self.input_device.as_ref().map_or(true, |d| {
-                    client_name_changed || (d.device_type() != InputDeviceType::XTestDevice && d.device_type() != InputDeviceType::AutoPilotDevice)
-                }) {
-                    // Try XTest first
-                    match crate::input::xtest_device::XTestDevice::new(capturable.clone()) {
-                        Ok(xtest_device) => {
-                            debug!("Using XTest device for input");
-                            self.input_device = Some(Box::new(xtest_device));
-                        }
-                        Err(e) => {
-                            if has_x_display() {
-                                debug!("XTest not available ({}), falling back to AutoPilot", e);
-                                self.input_device = Some(Box::new(
-                                    crate::input::autopilot_device::AutoPilotDevice::new(
-                                        capturable.clone(),
-                                    ),
-                                ));
-                            } else {
+                            Err(err) => {
                                 warn!(
-                                    "XTest not available ({}), DISPLAY is unset; continuing without input backend",
-                                    e
+                                    "Failed to create Wayland portal input device, falling back to legacy backends: {}",
+                                    err
                                 );
-                                self.input_device = None;
-                                self.send_message(MessageOutbound::Error(
-                                    "Input disabled: no usable Linux input backend is available."
-                                        .to_string(),
-                                ));
                             }
                         }
+                    } else if let Some(d) = self.input_device.as_mut() {
+                        d.set_capturable(capturable.clone());
+                        portal_selected = true;
                     }
-                } else if let Some(d) = self.input_device.as_mut() {
-                    d.set_capturable(capturable.clone());
+                }
+
+                if !portal_selected && config.uinput_support {
+                    if self.input_device.as_ref().map_or(true, |d| {
+                        client_name_changed || d.device_type() != InputDeviceType::UInputDevice
+                    }) {
+                        let device = crate::input::uinput_device::UInputDevice::new(
+                            capturable.clone(),
+                            &self.client_name,
+                        );
+                        match device {
+                            Ok(d) => self.input_device = Some(Box::new(d)),
+                            Err(e) => {
+                                error!("Failed to create uinput device: {}", e);
+                                if let CErrorCode::UInputNotAccessible = e.to_enum() {
+                                    (self.on_uinput_inaccessible)();
+                                }
+                                // Try to fall back to XTest
+                                debug!("Attempting to use XTest as fallback");
+                                match crate::input::xtest_device::XTestDevice::new(
+                                    capturable.clone(),
+                                ) {
+                                    Ok(xtest_device) => {
+                                        debug!("Successfully created XTest device as fallback");
+                                        self.input_device = Some(Box::new(xtest_device));
+                                    }
+                                    Err(xtest_err) => {
+                                        error!("Failed to create XTest device: {}", xtest_err);
+                                        self.input_device = None;
+                                        self.send_message(MessageOutbound::Error(format!(
+                                            "Input disabled: failed to create input device (uinput: {}, xtest: {})",
+                                            e, xtest_err
+                                        )));
+                                    }
+                                }
+                            }
+                        }
+                    } else if let Some(d) = self.input_device.as_mut() {
+                        d.set_capturable(capturable.clone());
+                    }
+                } else if !portal_selected {
+                    // When uinput_support is false, try XTest first, then fall back to AutoPilot
+                    if self.input_device.as_ref().map_or(true, |d| {
+                        client_name_changed
+                            || (d.device_type() != InputDeviceType::XTestDevice
+                                && d.device_type() != InputDeviceType::AutoPilotDevice)
+                    }) {
+                        // Try XTest first
+                        match crate::input::xtest_device::XTestDevice::new(capturable.clone()) {
+                            Ok(xtest_device) => {
+                                debug!("Using XTest device for input");
+                                self.input_device = Some(Box::new(xtest_device));
+                            }
+                            Err(e) => {
+                                if has_x_display() {
+                                    debug!(
+                                        "XTest not available ({}), falling back to AutoPilot",
+                                        e
+                                    );
+                                    self.input_device = Some(Box::new(
+                                        crate::input::autopilot_device::AutoPilotDevice::new(
+                                            capturable.clone(),
+                                        ),
+                                    ));
+                                } else {
+                                    warn!(
+                                        "XTest not available ({}), DISPLAY is unset; continuing without input backend",
+                                        e
+                                    );
+                                    self.input_device = None;
+                                    self.send_message(MessageOutbound::Error(
+                                        "Input disabled: no usable Linux input backend is available."
+                                            .to_string(),
+                                    ));
+                                }
+                            }
+                        }
+                    } else if let Some(d) = self.input_device.as_mut() {
+                        d.set_capturable(capturable.clone());
+                    }
                 }
             }
 

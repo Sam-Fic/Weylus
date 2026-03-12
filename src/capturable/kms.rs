@@ -1,5 +1,6 @@
 use crate::capturable::{Capturable, Geometry, Recorder};
 use crate::video::PixelProvider;
+use std::any::Any;
 
 use drm::control::{connector, crtc, framebuffer, plane, Device as ControlDevice, PlaneType};
 use drm::{ClientCapability, Device};
@@ -114,6 +115,10 @@ pub struct KmsCapturable {
 }
 
 impl Capturable for KmsCapturable {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
     fn name(&self) -> String {
         format!("KMS {} {}", self.device_path, self.connector_name)
     }
