@@ -49,6 +49,10 @@ typedef struct Capturable
 char* get_property(
 	Display* disp, Window win, Atom xa_prop_type, char* prop_name, unsigned long* size, Error* err);
 
+void x11_set_error_handler();
+void x11_clear_error_state();
+int x11_take_error_state(int* error_code, int* request_code, int* minor_code);
+
 void get_geometry(
 	Capturable* cap, int* x, int* y, unsigned int* width, unsigned int* height, Error* err);
 

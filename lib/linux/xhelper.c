@@ -11,12 +11,21 @@
 #include "../log.h"
 #include "xhelper.h"
 
+static volatile int g_x11_error_seen = 0;
+static volatile int g_x11_error_code = 0;
+static volatile int g_x11_request_code = 0;
+static volatile int g_x11_minor_code = 0;
+
 int x11_error_handler(Display* disp, XErrorEvent* err)
 {
 	char buf1[128], buf2[128], message_selector[64];
 	XGetErrorText(disp, err->error_code, buf1, sizeof(buf1));
 	snprintf(message_selector, sizeof(message_selector), "XRequest.%d", err->request_code);
 	XGetErrorDatabaseText(disp, "", message_selector, message_selector, buf2, sizeof(buf2));
+	g_x11_error_seen = 1;
+	g_x11_error_code = err->error_code;
+	g_x11_request_code = err->request_code;
+	g_x11_minor_code = err->minor_code;
 	log_debug("X11 error: %s: %s 0x%lx", buf1, buf2, err->resourceid);
 	return 0;
 }
@@ -26,6 +35,27 @@ void x11_set_error_handler()
 	// setting an error handler is required as otherwise xlib may just exit the process, even though
 	// the error was recoverable.
 	XSetErrorHandler(x11_error_handler);
+}
+
+void x11_clear_error_state()
+{
+	g_x11_error_seen = 0;
+	g_x11_error_code = 0;
+	g_x11_request_code = 0;
+	g_x11_minor_code = 0;
+}
+
+int x11_take_error_state(int* error_code, int* request_code, int* minor_code)
+{
+	int seen = g_x11_error_seen;
+	if (error_code)
+		*error_code = g_x11_error_code;
+	if (request_code)
+		*request_code = g_x11_request_code;
+	if (minor_code)
+		*minor_code = g_x11_minor_code;
+	x11_clear_error_state();
+	return seen;
 }
 
 int locale_to_utf8(char* src, char* dest, size_t size)

@@ -30,6 +30,7 @@ struct CaptureContext
 	Capturable cap;
 	XImage* ximg;
 	XShmSegmentInfo shminfo;
+	int use_xshm;
 	int has_xfixes;
 	int has_offscreen;
 	int wayland;
@@ -45,22 +46,162 @@ struct Image
 	unsigned int height;
 };
 
-void* start_capture(Capturable* cap, CaptureContext* ctx, Error* err)
+static void free_capture_image(CaptureContext* ctx)
 {
-	if (XShmQueryExtension(cap->disp) != True)
+	if (!ctx || !ctx->ximg)
+		return;
+
+	if (ctx->use_xshm)
 	{
-		fill_error(err, 1, "XShmExtension is not available but required!");
-		return NULL;
+		XShmDetach(ctx->cap.disp, &ctx->shminfo);
+		if (ctx->shminfo.shmaddr)
+			shmdt(ctx->shminfo.shmaddr);
+		if (ctx->shminfo.shmid >= 0)
+			shmctl(ctx->shminfo.shmid, IPC_RMID, NULL);
+		ctx->shminfo.shmaddr = NULL;
+		ctx->shminfo.shmid = -1;
 	}
 
+	XDestroyImage(ctx->ximg);
+	ctx->ximg = NULL;
+	ctx->use_xshm = 0;
+}
+
+static void free_unattached_xshm_image(CaptureContext* ctx)
+{
+	if (!ctx || !ctx->ximg)
+		return;
+
+	if (ctx->shminfo.shmaddr)
+	{
+		shmdt(ctx->shminfo.shmaddr);
+		ctx->shminfo.shmaddr = NULL;
+	}
+	if (ctx->shminfo.shmid >= 0)
+	{
+		shmctl(ctx->shminfo.shmid, IPC_RMID, NULL);
+		ctx->shminfo.shmid = -1;
+	}
+	XDestroyImage(ctx->ximg);
+	ctx->ximg = NULL;
+}
+
+static int ensure_xshm_image(CaptureContext* ctx, unsigned int width, unsigned int height)
+{
+	if (XShmQueryExtension(ctx->cap.disp) != True)
+		return 0;
+
+	ctx->ximg = XShmCreateImage(
+		ctx->cap.disp,
+		DefaultVisualOfScreen(ctx->cap.screen),
+		DefaultDepthOfScreen(ctx->cap.screen),
+		ZPixmap,
+		NULL,
+		&ctx->shminfo,
+		width,
+		height);
+	if (!ctx->ximg)
+		return 0;
+
+	ctx->shminfo.shmid =
+		shmget(IPC_PRIVATE, ctx->ximg->bytes_per_line * ctx->ximg->height, IPC_CREAT | 0777);
+	if (ctx->shminfo.shmid < 0)
+	{
+		XDestroyImage(ctx->ximg);
+		ctx->ximg = NULL;
+		return 0;
+	}
+
+	ctx->shminfo.shmaddr = shmat(ctx->shminfo.shmid, 0, 0);
+	if (ctx->shminfo.shmaddr == (char*)-1)
+	{
+		ctx->shminfo.shmaddr = NULL;
+		shmctl(ctx->shminfo.shmid, IPC_RMID, NULL);
+		ctx->shminfo.shmid = -1;
+		XDestroyImage(ctx->ximg);
+		ctx->ximg = NULL;
+		return 0;
+	}
+
+	ctx->ximg->data = ctx->shminfo.shmaddr;
+	ctx->shminfo.readOnly = False;
+
+	x11_clear_error_state();
+	if (!XShmAttach(ctx->cap.disp, &ctx->shminfo))
+	{
+		free_unattached_xshm_image(ctx);
+		return 0;
+	}
+	ctx->use_xshm = 1;
+	XSync(ctx->cap.disp, False);
+	if (x11_take_error_state(NULL, NULL, NULL))
+	{
+		free_capture_image(ctx);
+		return 0;
+	}
+
+	return 1;
+}
+
+static Bool capture_drawable(
+	CaptureContext* ctx, Drawable drawable, int x, int y, unsigned int width, unsigned int height)
+{
+	if (ctx->use_xshm)
+	{
+		int error_code = 0, request_code = 0, minor_code = 0;
+		x11_clear_error_state();
+		Bool ret = XShmGetImage(ctx->cap.disp, drawable, ctx->ximg, x, y, 0x00ffffff);
+		XSync(ctx->cap.disp, False);
+		if (ret == True && !x11_take_error_state(&error_code, &request_code, &minor_code))
+			return True;
+
+		log_warn(
+			"XShm capture failed, falling back to XGetImage (error=%d request=%d minor=%d).",
+			error_code,
+			request_code,
+			minor_code);
+		free_capture_image(ctx);
+	}
+
+	if (ctx->ximg)
+	{
+		XDestroyImage(ctx->ximg);
+		ctx->ximg = NULL;
+	}
+
+	x11_clear_error_state();
+	ctx->ximg = XGetImage(ctx->cap.disp, drawable, x, y, width, height, 0x00ffffff, ZPixmap);
+	XSync(ctx->cap.disp, False);
+	if (!ctx->ximg || x11_take_error_state(NULL, NULL, NULL))
+	{
+		if (ctx->ximg)
+		{
+			XDestroyImage(ctx->ximg);
+			ctx->ximg = NULL;
+		}
+		return False;
+	}
+
+	return True;
+}
+
+void* start_capture(Capturable* cap, CaptureContext* ctx, Error* err)
+{
 	if (!ctx)
 	{
 		ctx = malloc(sizeof(CaptureContext));
+		memset(ctx, 0, sizeof(CaptureContext));
+		ctx->shminfo.shmid = -1;
 
 		int major, minor;
 		Bool pixmaps = False;
-		XShmQueryVersion(cap->disp, &major, &minor, &pixmaps);
-		ctx->has_offscreen = pixmaps == True;
+		if (XShmQueryExtension(cap->disp) == True)
+		{
+			XShmQueryVersion(cap->disp, &major, &minor, &pixmaps);
+			ctx->has_offscreen = pixmaps == True;
+		}
+		else
+			ctx->has_offscreen = 0;
 		if (ctx->has_offscreen && cap->type == WINDOW && cap->c.winfo.is_regular_window)
 		{
 			int event_base, error_base;
@@ -87,45 +228,18 @@ void* start_capture(Capturable* cap, CaptureContext* ctx, Error* err)
 	int x, y;
 	unsigned int width, height;
 	get_geometry(cap, &x, &y, &width, &height, err);
-	ctx->ximg = XShmCreateImage(
-		cap->disp,
-		DefaultVisualOfScreen(cap->screen),
-		DefaultDepthOfScreen(cap->screen),
-		ZPixmap,
-		NULL,
-		&ctx->shminfo,
-		width,
-		height);
-
-	ctx->shminfo.shmid =
-		shmget(IPC_PRIVATE, ctx->ximg->bytes_per_line * ctx->ximg->height, IPC_CREAT | 0777);
-	ctx->shminfo.shmaddr = ctx->ximg->data = (char*)shmat(ctx->shminfo.shmid, 0, 0);
-	ctx->shminfo.readOnly = False;
-	if (ctx->shminfo.shmid < 0)
-	{
-		fill_error(err, 1, "Fatal shminfo error!");
-		free(ctx);
+	if (err->code)
 		return NULL;
-	}
-	if (!XShmAttach(cap->disp, &ctx->shminfo))
-	{
-		fill_error(err, 1, "XShmAttach() failed");
-		free(ctx);
-		return NULL;
-	}
+	if (!ensure_xshm_image(ctx, width, height))
+		log_warn("X11 capture is using XGetImage fallback instead of XShm.");
 
 	return ctx;
 }
 
 void stop_capture(CaptureContext* ctx, Error* err)
 {
-	XShmDetach(ctx->cap.disp, &ctx->shminfo);
-	XDestroyImage(ctx->ximg);
-	if (shmdt(ctx->shminfo.shmaddr) != 0)
-	{
-		fill_error(err, 1, "Failed to detach shared memory!");
-	}
-	shmctl(ctx->shminfo.shmid, IPC_RMID, NULL);
+	(void)err;
+	free_capture_image(ctx);
 	if (ctx->has_offscreen && ctx->cap.type == WINDOW && ctx->cap.c.winfo.is_regular_window)
 		XCompositeUnredirectWindow(ctx->cap.disp, ctx->cap.c.winfo.win, False);
 	free(ctx);
@@ -139,17 +253,18 @@ void capture_screen(CaptureContext* ctx, struct Image* img, int capture_cursor, 
 	get_geometry(&ctx->cap, &x, &y, &width, &height, err);
 	OK_OR_ABORT(err);
 	// if window resized, create new cap...
-	if (width != (unsigned int)ctx->ximg->width || height != (unsigned int)ctx->ximg->height)
+	if (ctx->use_xshm &&
+		(width != (unsigned int)ctx->ximg->width || height != (unsigned int)ctx->ximg->height))
 	{
-		XShmDetach(ctx->cap.disp, &ctx->shminfo);
+		free_capture_image(ctx);
+		if (!ensure_xshm_image(ctx, width, height))
+			log_warn("X11 capture resized into XGetImage fallback instead of XShm.");
+	}
+	else if (!ctx->use_xshm && ctx->ximg &&
+			 (width != (unsigned int)ctx->ximg->width || height != (unsigned int)ctx->ximg->height))
+	{
 		XDestroyImage(ctx->ximg);
-		shmdt(ctx->shminfo.shmaddr);
-		shmctl(ctx->shminfo.shmid, IPC_RMID, NULL);
-		CaptureContext* new_ctx = start_capture(&ctx->cap, ctx, err);
-		if (!new_ctx)
-		{
-			return;
-		}
+		ctx->ximg = NULL;
 	}
 
 	Bool get_img_ret = False;
@@ -160,19 +275,24 @@ void capture_screen(CaptureContext* ctx, struct Image* img, int capture_cursor, 
 	{
 		Window* active_window;
 		unsigned long size;
+		Error active_window_err = {0};
 
 		int is_offscreen = ctx->cap.c.winfo.is_regular_window &&
 						   (x < 0 || y < 0 || x + (int)width > ctx->cap.screen->width ||
 							y + (int)height > ctx->cap.screen->height);
 
-		active_window =
-			(Window*)get_property(ctx->cap.disp, root, XA_WINDOW, "_NET_ACTIVE_WINDOW", &size, err);
-		if (!ctx->wayland && *active_window == ctx->cap.c.winfo.win && !is_offscreen)
+		active_window = (Window*)get_property(
+			ctx->cap.disp, root, XA_WINDOW, "_NET_ACTIVE_WINDOW", &size, &active_window_err);
+		if (active_window_err.code)
+			log_debug(
+				"Ignoring _NET_ACTIVE_WINDOW lookup failure during X11 capture: %s",
+				active_window_err.error_str);
+		if (!ctx->wayland && active_window && *active_window == ctx->cap.c.winfo.win && !is_offscreen)
 		{
 			// cap window within its root so menus are visible as strictly speaking menus do not
 			// belong to the window itself ...
 			// But don't do this on (X)Wayland as the root window is just black in that case.
-			get_img_ret = XShmGetImage(ctx->cap.disp, root, ctx->ximg, x, y, 0x00ffffff);
+			get_img_ret = capture_drawable(ctx, root, x, y, width, height);
 		}
 		else
 		{
@@ -185,42 +305,42 @@ void capture_screen(CaptureContext* ctx, struct Image* img, int capture_cursor, 
 				if (ctx->has_offscreen)
 				{
 					Pixmap pm = XCompositeNameWindowPixmap(ctx->cap.disp, ctx->cap.c.winfo.win);
-					get_img_ret = XShmGetImage(ctx->cap.disp, pm, ctx->ximg, 0, 0, 0x00ffffff);
+					get_img_ret = capture_drawable(ctx, pm, 0, 0, width, height);
 					XFreePixmap(ctx->cap.disp, pm);
 				}
 				else
-					ERROR(
+				{
+					fill_error(
 						err,
 						1,
 						"Can not capture window as it is off screen and Xcomposite is "
 						"unavailable!");
+					free(active_window);
+					return;
+				}
 			}
 			else
-				get_img_ret =
-					XShmGetImage(ctx->cap.disp, ctx->cap.c.winfo.win, ctx->ximg, 0, 0, 0x00ffffff);
+				get_img_ret = capture_drawable(ctx, ctx->cap.c.winfo.win, 0, 0, width, height);
 		}
 		free(active_window);
 		break;
 	}
 	case RECT:
-		get_img_ret = XShmGetImage(ctx->cap.disp, root, ctx->ximg, x, y, 0x00ffffff);
+		get_img_ret = capture_drawable(ctx, root, x, y, width, height);
 		break;
 	}
 
 	Bool last_img_return = ctx->last_img_return;
 	ctx->last_img_return = get_img_ret;
-	// only print an error once and do not repeat this message if consecutive calls to XShmGetImage
-	// fail to avoid spamming the logs.
-	if (get_img_ret != True)
+	// only print an error once and do not repeat this message if consecutive calls fail to avoid
+	// spamming the logs.
+	if (get_img_ret != True || !ctx->ximg)
 	{
 		if (last_img_return != get_img_ret)
-		{
-			ERROR(err, 1, "XShmGetImage failed!");
-		}
+			fill_error(err, 1, "X11 image capture failed!");
 		else
-		{
-			ERROR(err, 2, "XShmGetImage failed!");
-		}
+			fill_error(err, 2, "X11 image capture failed!");
+		return;
 	}
 
 	// capture cursor if requested and if XFixes is available
