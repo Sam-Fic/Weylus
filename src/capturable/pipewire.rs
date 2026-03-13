@@ -474,6 +474,10 @@ fn select_sources(
     }
     args.insert("cursor_mode".into(), Variant(Box::new(cursor_mode)));
 
+    if let Some(token) = context.lock().unwrap().restore_token.clone() {
+        args.insert("restore_token".into(), Variant(Box::new(token)));
+    }
+
     let path = portal.select_sources(context.lock().unwrap().session.clone(), args)?;
     handle_response(portal, path, context, on_select_sources_response)?;
     Ok(())
@@ -526,6 +530,9 @@ fn on_start_response(
         .replace(portal.open_pipe_wire_remote(session.clone(), HashMap::new())?);
     if let Some(Some(t)) = r.results.get("restore_token").map(|t| t.as_str()) {
         context.restore_token = Some(t.to_string());
+        if let Some(path) = dirs::cache_dir().map(|p| p.join("weylus_restore_token")) {
+            let _ = std::fs::write(&path, t);
+        }
     }
     dbg!(&context.restore_token);
     if context.has_remote_desktop {
@@ -547,12 +554,16 @@ fn request_remote_desktop(
     let has_remote_desktop =
         std::env::var("DESKTOP_SESSION").map_or(false, |s| s.contains("gnome"));
 
+    let restore_token_path = dirs::cache_dir()
+        .map(|p| p.join("weylus_restore_token"))
+        .and_then(|p| std::fs::read_to_string(&p).ok());
+
     let context = CallBackContext {
         capture_cursor,
         session: Default::default(),
         streams: Default::default(),
         fd: None,
-        restore_token: None,
+        restore_token: restore_token_path,
         has_remote_desktop,
         failure: false,
     };
