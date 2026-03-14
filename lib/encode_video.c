@@ -201,7 +201,8 @@ void init_scaler(
 		goto end;
 	}
 
-	avfilter_graph_set_auto_convert(ctx->filter_graph_scale, AVFILTER_AUTO_CONVERT_NONE);
+	if (pix_fmt_out != AV_PIX_FMT_VAAPI)
+		avfilter_graph_set_auto_convert(ctx->filter_graph_scale, AVFILTER_AUTO_CONVERT_NONE);
 
 	/* buffer video source: the decoded frames from the decoder will be inserted here. */
 	snprintf(
@@ -222,6 +223,11 @@ void init_scaler(
 	{
 		log_warn("Cannot create buffer source");
 		goto end;
+	}
+
+	if (hw_device_ctx != NULL)
+	{
+		ctx->buffersrc_scale_ctx->hw_device_ctx = av_buffer_ref(hw_device_ctx);
 	}
 
 	/* buffer video sink: to terminate the filter chain. */
@@ -304,7 +310,8 @@ void init_scaler(
 			snprintf(
 				args,
 				sizeof(args),
-				"hwupload,scale_vaapi=w=%d:h=%d:format=%s:mode=fast",
+				"format=%s,hwupload,scale_vaapi=w=%d:h=%d:format=%s:mode=fast",
+				av_get_pix_fmt_name(pix_fmt_sw_out),
 				width_out,
 				height_out,
 				av_get_pix_fmt_name(pix_fmt_sw_out));
@@ -313,25 +320,104 @@ void init_scaler(
 		snprintf(args, sizeof(args), "scale=w=%d:h=%d:flags=fast_bilinear", width_out, height_out);
 	}
 
-	if ((ret = avfilter_graph_parse_ptr(ctx->filter_graph_scale, args, &inputs, &outputs, NULL)) <
-		0)
+	if (hw_device_ctx != NULL)
 	{
-		log_warn("Failed to parse filter");
-		goto end;
-	}
+		// Use segment API so we can set hw_device_ctx on each filter before init.
+		// avfilter_graph_parse_ptr initializes filters internally, too late for hwupload.
+		AVFilterGraphSegment* seg = NULL;
+		AVFilterInOut* seg_inputs = NULL;
+		AVFilterInOut* seg_outputs = NULL;
 
-	for (unsigned int i = 0; i < ctx->filter_graph_scale->nb_filters; i++)
-	{
-		AVFilterContext* filt = ctx->filter_graph_scale->filters[i];
-		if (strcmp(filt->filter->name, "hwupload") == 0)
+		ret = avfilter_graph_segment_parse(ctx->filter_graph_scale, args, 0, &seg);
+		if (ret < 0)
 		{
-			filt->hw_device_ctx = av_buffer_ref(hw_device_ctx);
+			log_warn("Failed to parse filter segment: %s", av_err2str(ret));
+			goto end;
+		}
+
+		ret = avfilter_graph_segment_create_filters(seg, 0);
+		if (ret < 0)
+		{
+			avfilter_graph_segment_free(&seg);
+			log_warn("Failed to create filter contexts: %s", av_err2str(ret));
+			goto end;
+		}
+
+		for (size_t ci = 0; ci < seg->nb_chains; ci++)
+		{
+			AVFilterChain* chain = seg->chains[ci];
+			for (size_t fi = 0; fi < chain->nb_filters; fi++)
+			{
+				AVFilterContext* filt = chain->filters[fi]->filter;
+				if (filt && !filt->hw_device_ctx)
+					filt->hw_device_ctx = av_buffer_ref(hw_device_ctx);
+			}
+		}
+
+		ret = avfilter_graph_segment_apply_opts(seg, 0);
+		if (ret < 0)
+		{
+			avfilter_graph_segment_free(&seg);
+			log_warn("Failed to apply filter opts: %s", av_err2str(ret));
+			goto end;
+		}
+
+		ret = avfilter_graph_segment_init(seg, 0);
+		if (ret < 0)
+		{
+			avfilter_graph_segment_free(&seg);
+			log_warn("Failed to init filters: %s", av_err2str(ret));
+			goto end;
+		}
+
+		ret = avfilter_graph_segment_link(seg, 0, &seg_inputs, &seg_outputs);
+		avfilter_graph_segment_free(&seg);
+		if (ret < 0)
+		{
+			avfilter_inout_free(&seg_inputs);
+			avfilter_inout_free(&seg_outputs);
+			log_warn("Failed to link filters: %s", av_err2str(ret));
+			goto end;
+		}
+
+		if (seg_inputs)
+		{
+			ret = avfilter_link(
+				ctx->buffersrc_scale_ctx, 0, seg_inputs->filter_ctx, seg_inputs->pad_idx);
+			avfilter_inout_free(&seg_inputs);
+			if (ret < 0)
+			{
+				avfilter_inout_free(&seg_outputs);
+				log_warn("Failed to link buffersrc to filter: %s", av_err2str(ret));
+				goto end;
+			}
+		}
+
+		if (seg_outputs)
+		{
+			ret = avfilter_link(
+				seg_outputs->filter_ctx, seg_outputs->pad_idx, ctx->buffersink_scale_ctx, 0);
+			avfilter_inout_free(&seg_outputs);
+			if (ret < 0)
+			{
+				log_warn("Failed to link filter to buffersink: %s", av_err2str(ret));
+				goto end;
+			}
+		}
+	}
+	else
+	{
+		if ((ret = avfilter_graph_parse_ptr(
+				 ctx->filter_graph_scale, args, &inputs, &outputs, NULL)) < 0)
+		{
+			log_warn("Failed to parse filter: %s", av_err2str(ret));
+			goto end;
 		}
 	}
 
 	if ((ret = avfilter_graph_config(ctx->filter_graph_scale, NULL)) < 0)
 	{
-		log_warn("Failed to configure filter graph");
+		log_warn("Failed to configure filter graph: %s", av_err2str(ret));
 		goto end;
 	}
 

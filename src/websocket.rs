@@ -443,7 +443,21 @@ fn handle_video<S: WeylusSender + Clone + 'static>(
                     // This shouldn't affect other Recorder trait objects.
                     recorder = None;
                 }
-                match config.capturable.recorder(config.capture_cursor) {
+                const MAX_RETRIES: u32 = 5;
+                const RETRY_DELAY: Duration = Duration::from_millis(500);
+                let mut result = config.capturable.recorder(config.capture_cursor);
+                for attempt in 1..MAX_RETRIES {
+                    if result.is_ok() {
+                        break;
+                    }
+                    warn!(
+                        "Failed to init screen cast (attempt {}/{}), retrying...",
+                        attempt, MAX_RETRIES
+                    );
+                    std::thread::sleep(RETRY_DELAY);
+                    result = config.capturable.recorder(config.capture_cursor);
+                }
+                match result {
                     Ok(r) => {
                         recorder = Some(r);
                         max_width = config.max_width;

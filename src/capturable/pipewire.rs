@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::collections::HashMap;
 use std::error::Error;
+use std::io::Write;
 use std::os::unix::io::AsRawFd;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -24,6 +25,52 @@ use crate::capturable::remote_desktop_dbus::{
     OrgFreedesktopPortalRemoteDesktop, OrgFreedesktopPortalRequestResponse,
     OrgFreedesktopPortalScreenCast,
 };
+
+fn get_sway_rotation() -> u32 {
+    use std::io::Read;
+    let sock = match std::env::var("SWAYSOCK") {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let mut stream = match std::os::unix::net::UnixStream::connect(&sock) {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    // sway IPC: magic + len + type
+    let payload = b"GET_OUTPUTS";
+    let mut msg = b"i3-ipc".to_vec();
+    msg.extend_from_slice(&(payload.len() as u32).to_ne_bytes());
+    msg.extend_from_slice(&3u32.to_ne_bytes()); // GET_OUTPUTS = 3
+    msg.extend_from_slice(payload);
+    if stream.write_all(&msg).is_err() { return 0; }
+    let mut header = [0u8; 14];
+    if stream.read_exact(&mut header).is_err() { return 0; }
+    let len = u32::from_ne_bytes(header[6..10].try_into().unwrap_or([0;4])) as usize;
+    let mut body = vec![0u8; len];
+    if stream.read_exact(&mut body).is_err() { return 0; }
+    let s = String::from_utf8_lossy(&body);
+    // parse "transform":"90" or "270" etc
+    if let Some(pos) = s.find("\"transform\"") {
+        let rest = &s[pos+12..];
+        if let Some(start) = rest.find('"') {
+            let rest = &rest[start+1..];
+            if let Some(end) = rest.find('"') {
+                let t = &rest[..end];
+                return match t {
+                    "90" => 1,   // clockwise 90
+                    "180" => 2,
+                    "270" => 3,  // clockwise 270
+                    "flipped" => 4,
+                    "flipped-90" => 5,
+                    "flipped-180" => 6,
+                    "flipped-270" => 7,
+                    _ => 0,
+                };
+            }
+        }
+    }
+    0
+}
 
 #[derive(Debug, Clone, Copy)]
 struct PwStreamInfo {
@@ -86,6 +133,7 @@ pub struct PipeWireCapturable {
     source_type: u64,
     size: Option<(i32, i32)>,
     portal_session: Option<PortalRemoteDesktopSession>,
+    pub rotation: u32,
 }
 
 impl PipeWireCapturable {
@@ -95,6 +143,7 @@ impl PipeWireCapturable {
         portal_session: Option<PortalRemoteDesktopSession>,
         stream: PwStreamInfo,
     ) -> Self {
+        let rotation = get_sway_rotation();
         Self {
             dbus_conn: conn,
             fd,
@@ -102,6 +151,7 @@ impl PipeWireCapturable {
             source_type: stream.source_type,
             size: stream.size,
             portal_session,
+            rotation,
         }
     }
 
@@ -185,8 +235,25 @@ impl PipeWireRecorder {
         sink.set_property("drop", &true);
         sink.set_property("max-buffers", &1u32);
 
-        pipeline.add_many(&[&src, &sink])?;
-        src.link(&sink)?;
+        if capturable.rotation != 0 {
+            let flip = gst::ElementFactory::make("videoflip").build()?;
+            flip.set_property_from_str("method", match capturable.rotation {
+                1 => "counterclockwise",
+                2 => "rotate-180",
+                3 => "clockwise",
+                4 => "horizontal-flip",
+                5 => "upper-left-diagonal",
+                6 => "vertical-flip",
+                7 => "upper-right-diagonal",
+                _ => "none",
+            });
+            pipeline.add_many(&[&src, &flip, &sink])?;
+            src.link(&flip)?;
+            flip.link(&sink)?;
+        } else {
+            pipeline.add_many(&[&src, &sink])?;
+            src.link(&sink)?;
+        }
         let appsink = sink
             .dynamic_cast::<AppSink>()
             .map_err(|_| GStreamerError("Sink element is expected to be an appsink!".into()))?;
@@ -514,7 +581,14 @@ fn select_sources(
     // 1: Hidden. The cursor is not part of the screen cast stream.
     // 2: Embedded: The cursor is embedded as part of the stream buffers.
     // 4: Metadata: The cursor is not part of the screen cast stream, but sent as PipeWire stream metadata.
-    let cursor_mode = if capture_cursor { 2u32 } else { 1u32 };
+    let available_cursor_modes = portal.available_cursor_modes().unwrap_or(0);
+    let cursor_mode = if capture_cursor {
+        if available_cursor_modes & 2 != 0 { Some(2u32) } else { None }
+    } else {
+        if available_cursor_modes & 1 != 0 { Some(1u32) }
+        else if available_cursor_modes & 2 != 0 { Some(2u32) }
+        else { None }
+    };
 
     let is_plasma = std::env::var("DESKTOP_SESSION").map_or(false, |s| s.contains("plasma"));
     if is_plasma && capture_cursor {
@@ -527,7 +601,9 @@ fn select_sources(
                     You have been warned."
         );
     }
-    args.insert("cursor_mode".into(), Variant(Box::new(cursor_mode)));
+    if let Some(mode) = cursor_mode {
+        args.insert("cursor_mode".into(), Variant(Box::new(mode)));
+    }
 
     if let Some(token) = context.lock().unwrap().restore_token.clone() {
         args.insert("restore_token".into(), Variant(Box::new(token)));
