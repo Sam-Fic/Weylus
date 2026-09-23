@@ -17,6 +17,9 @@ pub enum ThemeType {
     Metro,
 }
 
+// Themes only apply to the fltk based gui, on Linux the native GTK/libadwaita
+// window follows the system theme instead.
+#[cfg(not(target_os = "linux"))]
 const THEME_LIST: [ThemeType; 8] = [
     ThemeType::Aero,
     ThemeType::AquaClassic,
@@ -34,6 +37,7 @@ impl Default for ThemeType {
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 impl ThemeType {
     pub fn apply(&self) {
         let theme = match self {
@@ -104,7 +108,11 @@ pub struct Config {
     #[arg(long, help = "Start Weylus server immediately on program start.")]
     #[serde(default)]
     pub auto_start: bool,
-    #[arg(long, help = "Gui Theme")]
+    #[arg(
+        long,
+        help = "Gui Theme. Only used by the fltk gui, on Linux Weylus follows the GNOME \
+            system theme."
+    )]
     pub gui_theme: Option<ThemeType>,
     #[arg(long, help = "Run Weylus without gui and start immediately.")]
     #[serde(default)]

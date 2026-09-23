@@ -46,6 +46,8 @@ num_cpus = "^1.16"
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = "^0.9"
 gstreamer = "^0.24"
+gtk4 = { version = "0.11", features = ["v4_8"] }
+libadwaita = { version = "0.9", features = ["v1_5"] }
 gstreamer-app = { version = "^0.24", features = ["v1_16"] }
 gstreamer-video = "^0.24"
 

@@ -1,34 +1,62 @@
 use std::cmp::min;
-use std::io::Cursor;
-use std::iter::Iterator;
-use std::net::{IpAddr, SocketAddr};
-use std::sync::atomic::AtomicBool;
 
 use fltk::app;
 use fltk::enums::{FrameType, LabelType};
-use fltk::image::PngImage;
 use fltk::menu::Choice;
-use std::sync::{mpsc, Arc, Mutex};
-use tracing::{error, info, warn};
+use std::sync::{mpsc, Mutex};
+#[cfg(not(target_os = "linux"))]
+use std::sync::Arc;
+#[cfg(target_os = "linux")]
+use tracing::warn;
 
 use fltk::{
     app::{awake_callback, App},
-    button::{Button, CheckButton},
     frame::Frame,
-    input::{Input, IntInput},
-    output::Output,
     prelude::*,
-    text::{TextBuffer, TextDisplay},
     window::Window,
 };
 
-#[cfg(not(target_os = "windows"))]
+// Everything below is only needed by the fltk main window, which is used on
+// every platform but Linux, where the native GTK/libadwaita window is used.
+#[cfg(not(target_os = "linux"))]
+use std::io::Cursor;
+#[cfg(not(target_os = "linux"))]
+use std::net::{IpAddr, SocketAddr};
+#[cfg(not(target_os = "linux"))]
+use std::sync::atomic::AtomicBool;
+#[cfg(not(target_os = "linux"))]
+use tracing::{error, info, warn};
+
+#[cfg(not(target_os = "linux"))]
+use fltk::{
+    button::{Button, CheckButton},
+    image::PngImage,
+    input::{Input, IntInput},
+    output::Output,
+    text::{TextBuffer, TextDisplay},
+};
+
+#[cfg(all(not(target_os = "windows"), not(target_os = "linux")))]
 use pnet_datalink as datalink;
 
-use crate::config::{write_config, Config, ThemeType};
+use crate::config::Config;
 use crate::protocol::{CustomInputAreas, Rect};
+
+#[cfg(not(target_os = "linux"))]
+use crate::config::{write_config, ThemeType};
+#[cfg(not(target_os = "linux"))]
 use crate::web::Web2UiMessage::UInputInaccessible;
 
+/// Entry point of the graphical interface.
+///
+/// On Linux the native GTK 4 / libadwaita window is used, on all other
+/// platforms the fltk window below.
+#[cfg(target_os = "linux")]
+pub fn run(config: &Config, log_receiver: mpsc::Receiver<String>) {
+    crate::gui_gtk::run(config, log_receiver);
+}
+
+#[cfg(not(target_os = "linux"))]
 pub fn run(config: &Config, log_receiver: mpsc::Receiver<String>) {
     let width = 200;
     let height = 30;
@@ -395,6 +423,47 @@ struct InputAreaWindowContext {
     workspaces: Vec<Rect>,
 }
 
+/// Linux uses the GTK main window, so fltk is only needed for the overlay and
+/// therefore runs in its own thread. Make sure that thread is up and running
+/// before posting any request to it.
+#[cfg(target_os = "linux")]
+pub fn get_input_area(
+    _no_gui: bool,
+    output_sender: std::sync::mpsc::Sender<crate::protocol::CustomInputAreas>,
+) {
+    static INIT: std::sync::Once = std::sync::Once::new();
+    INIT.call_once(|| {
+        let (sender, receiver) = std::sync::mpsc::channel::<()>();
+        std::thread::spawn(move || {
+            let _app = App::default().with_scheme(fltk::app::AppScheme::Gtk);
+            let winctx = create_custom_input_area_window();
+            WINCTX.lock().unwrap().replace(winctx);
+            let _ = sender.send(());
+            loop {
+                // calling wait_for ensures that the fltk event loop keeps running even if
+                // there is no window shown
+                if let Err(err) = app::wait_for(1.0) {
+                    warn!("Error waiting for fltk events: {err}.");
+                }
+            }
+        });
+        // wait until the window context exists, otherwise awake_callback below
+        // could run before fltk is initialized
+        let _ = receiver.recv();
+    });
+
+    awake_callback(move || {
+        let mut winctx = WINCTX.lock().unwrap();
+        if winctx.is_none() {
+            winctx.replace(create_custom_input_area_window());
+        }
+        let winctx = winctx.as_mut().unwrap();
+        custom_input_area_window_handle_events(&mut winctx.win, output_sender.clone());
+        show_overlay_window(winctx);
+    });
+}
+
+#[cfg(not(target_os = "linux"))]
 pub fn get_input_area(
     no_gui: bool,
     output_sender: std::sync::mpsc::Sender<crate::protocol::CustomInputAreas>,

@@ -21,6 +21,8 @@ mod capturable;
 mod cerror;
 mod config;
 mod gui;
+#[cfg(target_os = "linux")]
+mod gui_gtk;
 mod input;
 mod log;
 mod protocol;

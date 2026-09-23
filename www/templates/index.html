@@ -6,6 +6,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#f6f2f9" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#141218" media="(prefers-color-scheme: dark)">
     <title>Weylus</title>
     <link rel="stylesheet" href="style.css">
     <script src="lib.js"></script>
@@ -24,63 +26,100 @@
         <div id="handle">⠿</div>
         <div id="settings_scroll">
             <h2>Settings</h2>
+
             <section>
-                <label for="window">Capture:</label>
-                <select id="window"></select>
-                <button id="refresh">Refresh List</button>
+                <h3>Capture</h3>
+                <div class="field">
+                    <label for="window">Window or screen</label>
+                    <select id="window"></select>
+                </div>
+                <div class="actions">
+                    <button id="refresh" class="tonal">Refresh List</button>
+                </div>
             </section>
-            <h3>Video</h3>
+
             <section>
-                <label><input type="checkbox" id="enable_video" checked /> <span>Enable Video</span></label>
-                <label><input type="checkbox" id="energysaving" /> <span>Energy Saving (no video, black
-                        screen)</span></label>
-                <label><input type="checkbox" id="stretch" checked /> <span>Stretch Video</span></label>
-                <button id="fullscreen">Toggle Fullscreen</button>
-                <label {{#if (not capture_cursor_enabled)}}class="hide" {{/if}}>
+                <h3>Video</h3>
+                <label class="row"><input type="checkbox" id="enable_video" checked /> <span>Enable Video</span></label>
+                <label class="row"><input type="checkbox" id="energysaving" /> <span>Energy Saving
+                        <small>No video, black screen</small></span></label>
+                <label class="row"><input type="checkbox" id="stretch" checked /> <span>Stretch Video</span></label>
+                <label class="row {{#if (not capture_cursor_enabled)}}hide{{/if}}">
                     <input type="checkbox" id="capture_cursor" />
                     <span>Capture Cursor</span>
                 </label>
-                <label><input type="checkbox" id="aggressive_seeking" checked /> <span>Lower Latency<br>(possibly
-                        choppy)</span></label>
-                <label>Max Video Resolution: <br><input type="range" id="scale_video" min="0.1" max="2" step="0.01"
-                        value="1.8" /><output></output></label>
-                <label>Frame Rate: <br><input type="range" id="frame_rate" value="0" /><output>30</output> fps</label>
+                <label class="row"><input type="checkbox" id="aggressive_seeking" checked /> <span>Lower Latency
+                        <small>Possibly choppy</small></span></label>
+                <div class="field">
+                    <label>Max Video Resolution</label>
+                    <div class="slider">
+                        <input type="range" id="scale_video" min="0.1" max="2" step="0.01" value="1.8" /><output></output>
+                    </div>
+                </div>
+                <div class="field">
+                    <label>Frame Rate</label>
+                    <div class="slider">
+                        <input type="range" id="frame_rate" value="0" /><output>30</output><span class="unit">fps</span>
+                    </div>
+                </div>
+                <div class="actions">
+                    <button id="fullscreen" class="tonal">Toggle Fullscreen</button>
+                </div>
             </section>
-            <h3>Input</h3>
+
             <section>
-                <label><input type="checkbox" id="enable_mouse" checked /> <span>Enable Mouse</span></label>
-                <label><input type="checkbox" id="enable_stylus" checked /> <span>Enable Stylus</span></label>
-                <label><input type="checkbox" id="enable_touch" checked /> <span>Enable Touch</span></label>
-                <label {{#if (not uinput_enabled)}}class="hide" {{/if}}>
+                <h3>Input</h3>
+                <label class="row"><input type="checkbox" id="enable_mouse" checked /> <span>Enable Mouse</span></label>
+                <label class="row"><input type="checkbox" id="enable_stylus" checked /> <span>Enable Stylus</span></label>
+                <label class="row"><input type="checkbox" id="enable_touch" checked /> <span>Enable Touch</span></label>
+                <label class="row {{#if (not uinput_enabled)}}hide{{/if}}">
                     <input type="checkbox" id="uinput_support" checked />
                     <span>Enable uinput</span>
                 </label>
-                <label>Min pressure to generate: <br><input type="range" id="min_pressure" min="0" max="1" step="0.01"
-                        value="0" /></label>
-                <button id="custom_input_areas" {{#if (not enable_custom_input_areas)}}class="hide" {{/if}}>Custom Input
-                    Area</button>
-                <label {{#if (not enable_custom_input_areas)}}class="hide" {{/if}}><input type="checkbox"
-                        id="enable_custom_input_areas" /> <span>Enable Custom Input
-                        Area</span></label>
+                <div class="field">
+                    <label>Min pressure to generate</label>
+                    <div class="slider">
+                        <input type="range" id="min_pressure" min="0" max="1" step="0.01" value="0" />
+                    </div>
+                </div>
+                <div class="actions">
+                    <button id="custom_input_areas"
+                        class="tonal {{#if (not enable_custom_input_areas)}}hide{{/if}}">Custom Input Area</button>
+                </div>
+                <label class="row {{#if (not enable_custom_input_areas)}}hide{{/if}}">
+                    <input type="checkbox" id="enable_custom_input_areas" />
+                    <span>Enable Custom Input Area</span>
+                </label>
             </section>
+
             <section {{#if (not uinput_enabled)}}class="hide" {{/if}}>
-                <label><span>Client Name:</span><br><input type="text" id="client_name" /><br><span>Optional, useful to
-                        distinguish multiple devices.</span></label>
+                <div class="field">
+                    <label for="client_name">Client Name
+                        <small>Optional, useful to distinguish multiple devices.</small>
+                    </label>
+                    <input type="text" id="client_name" placeholder="e.g. iPad" />
+                </div>
             </section>
+
+            <section id="stats_section">
+                <div class="stat">
+                    <span>FPS (receiving)</span><output id="fps">0</output>
+                </div>
+            </section>
+
+            <section id="debug_section">
+                <label class="row"><input type="checkbox" id="enable_debug_overlay" /> <span>Debug
+                        Overlay</span></label>
+            </section>
+
             <section id="displayoptions">
                 <label id="leftylabel"><input type="checkbox" id="lefty" />Swap</label>
                 <label id="vanish">Hide until Reload</label>
             </section>
-            <section id="stats_section">
-                <label><span>FPS (receiving): </span><output id="fps">0</output></label>
-            </section>
-            <section id="debug_section">
-                <label><input type="checkbox" id="enable_debug_overlay" /> <span>Debug
-                        Overlay</span></label>
-            </section>
+
             <section id="log_section" class="hide">
                 <label>Log
-                    <pre class="log" id="log" />
+                    <pre class="log" id="log"></pre>
                 </label>
             </section>
         </div>

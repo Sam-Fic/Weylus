@@ -1,18 +1,180 @@
+/* ==========================================================================
+   Weylus — Material 3 Expressive theme (m3e design language)
+
+   Pure CSS reskin: no JavaScript and no Rust changes.
+   Every id / class that lib.js depends on is preserved:
+     - ids: video, canvas, settings, settings_scroll, handle, window, refresh,
+            fullscreen, enable_video, energysaving, stretch, capture_cursor,
+            aggressive_seeking, scale_video, frame_rate, enable_mouse,
+            enable_stylus, enable_touch, uinput_support, min_pressure,
+            custom_input_areas, enable_custom_input_areas, client_name,
+            leftylabel, lefty, vanish, fps, enable_debug_overlay,
+            debug_overlay, log_section, log, displayoptions, stats_section
+     - classes with semantic meaning to lib.js: .hide, .vanish, .lefty, .updated
+     - #scale_video / #frame_rate must be immediately followed by their <output>
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Design tokens — color (light is the default, dark is a media override)
+   -------------------------------------------------------------------------- */
+:root {
+    color-scheme: light dark;
+
+    --md-sys-color-primary: #6750a4;
+    --md-sys-color-on-primary: #ffffff;
+    --md-sys-color-primary-container: #eaddff;
+    --md-sys-color-on-primary-container: #21005d;
+
+    --md-sys-color-secondary: #625b71;
+    --md-sys-color-on-secondary: #ffffff;
+    --md-sys-color-secondary-container: #e8def8;
+    --md-sys-color-on-secondary-container: #1d192b;
+
+    --md-sys-color-tertiary: #7d5260;
+    --md-sys-color-on-tertiary: #ffffff;
+    --md-sys-color-tertiary-container: #ffd8e4;
+    --md-sys-color-on-tertiary-container: #31111d;
+
+    --md-sys-color-error: #b3261e;
+    --md-sys-color-on-error: #ffffff;
+    --md-sys-color-error-container: #f9dedc;
+    --md-sys-color-on-error-container: #410e0b;
+
+    --md-sys-color-background: #f6f2f9;
+    --md-sys-color-on-background: #1d1b20;
+    --md-sys-color-surface: #fef7ff;
+    --md-sys-color-on-surface: #1d1b20;
+    --md-sys-color-surface-variant: #e7e0ec;
+    --md-sys-color-on-surface-variant: #49454f;
+    --md-sys-color-surface-container-lowest: #ffffff;
+    --md-sys-color-surface-container-low: #f7f2fa;
+    --md-sys-color-surface-container: #f3edf7;
+    --md-sys-color-surface-container-high: #ece6f0;
+    --md-sys-color-surface-container-highest: #e6e0e9;
+    --md-sys-color-outline: #79747e;
+    --md-sys-color-outline-variant: #cac4d0;
+    --md-sys-color-inverse-surface: #322f35;
+    --md-sys-color-inverse-on-surface: #f5eff7;
+    --md-sys-color-shadow: #000000;
+
+    /* state layers (plain rgba for maximum browser coverage) */
+    --md-sys-state-hover-layer: rgba(29, 27, 32, .08);
+    --md-sys-state-focus-layer: rgba(29, 27, 32, .12);
+    --md-sys-color-disabled: rgba(29, 27, 32, .38);
+
+    /* legacy aliases kept so third party templates still work */
+    --color: var(--md-sys-color-on-surface);
+    --background-color-1: var(--md-sys-color-surface-container-low);
+    --background-color-2: var(--md-sys-color-background);
+
+    /* shape */
+    --md-sys-shape-corner-xs: 4px;
+    --md-sys-shape-corner-s: 8px;
+    --md-sys-shape-corner-m: 12px;
+    --md-sys-shape-corner-l: 16px;
+    --md-sys-shape-corner-xl: 20px;
+    --md-sys-shape-corner-2xl: 28px;
+    --md-sys-shape-corner-3xl: 32px;
+    --md-sys-shape-corner-full: 9999px;
+
+    /* typography */
+    --md-sys-typescale-font: "Roboto Flex", "Roboto", "Google Sans", system-ui,
+        -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --md-sys-typescale-mono-font: "Roboto Mono", ui-monospace, SFMono-Regular,
+        Menlo, Consolas, monospace;
+
+    /* motion */
+    --md-sys-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+    --md-sys-motion-easing-emphasized: cubic-bezier(0.2, 0, 0, 1);
+    --md-sys-motion-duration-short: 200ms;
+    --md-sys-motion-duration-medium: 300ms;
+    --md-sys-motion-duration-long: 500ms;
+
+    /* elevation */
+    --md-sys-elevation-0: none;
+    --md-sys-elevation-1: 0 1px 2px 0 rgba(0, 0, 0, .30), 0 1px 3px 1px rgba(0, 0, 0, .15);
+    --md-sys-elevation-2: 0 1px 2px 0 rgba(0, 0, 0, .30), 0 2px 6px 2px rgba(0, 0, 0, .15);
+    --md-sys-elevation-3: 0 4px 8px 3px rgba(0, 0, 0, .15), 0 1px 3px 0 rgba(0, 0, 0, .30);
+
+    /* state layers */
+    --md-sys-state-hover-opacity: .08;
+    --md-sys-state-focus-opacity: .12;
+    --md-sys-state-pressed-opacity: .12;
+    --md-sys-state-disabled-opacity: .38;
+}
+
 @media (prefers-color-scheme: dark) {
     :root {
-        --color: #ddd;
-        --background-color-1: #303030;
-        --background-color-2: #202020;
+        --md-sys-color-primary: #d0bcff;
+        --md-sys-color-on-primary: #381e72;
+        --md-sys-color-primary-container: #4f378b;
+        --md-sys-color-on-primary-container: #eaddff;
+
+        --md-sys-color-secondary: #ccc2dc;
+        --md-sys-color-on-secondary: #332d41;
+        --md-sys-color-secondary-container: #4a4458;
+        --md-sys-color-on-secondary-container: #e8def8;
+
+        --md-sys-color-tertiary: #efb8c8;
+        --md-sys-color-on-tertiary: #492532;
+        --md-sys-color-tertiary-container: #633b48;
+        --md-sys-color-on-tertiary-container: #ffd8e4;
+
+        --md-sys-color-error: #f2b8b5;
+        --md-sys-color-on-error: #601410;
+        --md-sys-color-error-container: #8c1d18;
+        --md-sys-color-on-error-container: #f9dedc;
+
+        --md-sys-color-background: #141218;
+        --md-sys-color-on-background: #e6e0e9;
+        --md-sys-color-surface: #141218;
+        --md-sys-color-on-surface: #e6e0e9;
+        --md-sys-color-surface-variant: #49454f;
+        --md-sys-color-on-surface-variant: #cac4d0;
+        --md-sys-color-surface-container-lowest: #0f0d13;
+        --md-sys-color-surface-container-low: #1d1b20;
+        --md-sys-color-surface-container: #211f26;
+        --md-sys-color-surface-container-high: #2b2930;
+        --md-sys-color-surface-container-highest: #36343b;
+        --md-sys-color-outline: #938f99;
+        --md-sys-color-outline-variant: #49454f;
+        --md-sys-color-inverse-surface: #e6e0e9;
+        --md-sys-color-inverse-on-surface: #322f35;
+
+        --md-sys-state-hover-layer: rgba(230, 224, 233, .08);
+        --md-sys-state-focus-layer: rgba(230, 224, 233, .12);
+        --md-sys-color-disabled: rgba(230, 224, 233, .38);
     }
 }
-@media (prefers-color-scheme: light) {
-    :root {
-        --color: #111;
-        --background-color-1: #eee;
-        --background-color-2: #fff;
-    }
+
+/* --------------------------------------------------------------------------
+   2. Base / page shell
+   -------------------------------------------------------------------------- */
+* {
+    -webkit-tap-highlight-color: transparent;
 }
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: var(--md-sys-color-background);
+    color: var(--md-sys-color-on-background);
+    font-family: var(--md-sys-typescale-font);
+    -webkit-text-size-adjust: 100%;
+}
+
 main {
+    position: relative;
+    display: flex;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
     touch-action: none;
     user-select: none;
     -webkit-touch-callout: none;
@@ -20,17 +182,12 @@ main {
     -khtml-user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;
+    color: var(--md-sys-color-on-surface);
+    background: var(--md-sys-color-background);
 }
-body, html, main {
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    display: flex;
-    color: var(--color);
-    background: var(--background-color-2);
-}
+
+/* Mirrored video. stretch_video() in lib.js writes inline transforms here,
+   so never add a competing transform. */
 video {
     max-width: 100%;
     max-height: 100%;
@@ -39,11 +196,16 @@ video {
     display: block;
     margin: auto auto;
 }
+
+/* Ink overlay used when video is disabled. Sized by Painter in lib.js. */
 canvas {
     position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
 }
+
 input[type='text'] {
     touch-action: auto !important;
     user-select: text;
@@ -53,130 +215,459 @@ input[type='text'] {
     -moz-user-select: text;
     -ms-user-select: text;
 }
-input[type='range']::-webkit-slider-runnable-track, input[type="range"]::-moz-range-track {
-      background-color: #00aaff;
+
+/* --------------------------------------------------------------------------
+   3. Settings side sheet
+   -------------------------------------------------------------------------- */
+#settings,
+#handle,
+#debug_overlay {
+    color: var(--md-sys-color-on-surface);
 }
-.container {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-#settings, #handle, #debug_overlay {
-    color: var(--color);
-    background: var(--background-color-1);
-}
-#settings_scroll {
-    overflow: auto;
-    width: 100%;
-    height: 100%;
-}
+
 #settings {
-    width: 16em;
-    display: block;
     position: absolute;
-    right: 0;
     top: 0;
+    right: 0;
     bottom: 0;
-    transform: none;
-    padding: 1em;
-    font-family: sans-serif;
-    transition: transform 0.5s, opacity 0.5s;
+    left: auto;
+    z-index: 10;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    width: 21em;
+    max-width: 86vw;
+    padding: 0;
+    font-family: var(--md-sys-typescale-font);
+    background: var(--md-sys-color-surface-container-low);
+    border-radius: var(--md-sys-shape-corner-2xl) 0 0 var(--md-sys-shape-corner-2xl);
+    box-shadow: var(--md-sys-elevation-2);
+    transition:
+        transform var(--md-sys-motion-duration-long) var(--md-sys-motion-easing-emphasized),
+        opacity var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard);
 }
+
 #settings.lefty {
     left: 0;
     right: auto;
+    border-radius: 0 var(--md-sys-shape-corner-2xl) var(--md-sys-shape-corner-2xl) 0;
 }
-#settings.hide, #settings.vanish {
-    transform: translateX(100%);
-    opacity: 40%;
+
+#settings_scroll {
+    box-sizing: border-box;
+    flex: 1 1 auto;
+    width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 12px calc(24px + env(safe-area-inset-bottom, 0px));
 }
-#settings.hide.lefty, #settings.vanish.lefty {
-    transform: translateX(-100%);
-    opacity: 40%;
+
+#settings h2 {
+    margin: 0;
+    padding: 22px 8px 14px;
+    font-size: 22px;
+    font-weight: 400;
+    line-height: 28px;
+    letter-spacing: 0;
+    text-align: center;
+    color: var(--md-sys-color-on-surface);
 }
+
+#settings h3 {
+    margin: 14px 10px 6px;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 20px;
+    letter-spacing: .0071428571em;
+    text-align: left;
+    color: var(--md-sys-color-primary);
+}
+
+/* Cards */
+#settings section {
+    margin: 0 0 12px;
+    padding: 8px 4px;
+    background: var(--md-sys-color-surface-container-lowest);
+    border-radius: var(--md-sys-shape-corner-l);
+    box-shadow: var(--md-sys-elevation-1);
+}
+
+/* Drag handle that toggles the sheet */
 #handle {
     position: absolute;
-    top: 0;
-    left: -1em;
-    width: 1em;
-    border-radius: 0 0 0 0.25em;
-    padding: 0.2em 0 0.1em 0;
-    font-size: 150%;
-    text-align:center;
+    top: 50%;
+    left: -15px;
+    width: 15px;
+    height: 56px;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    padding: 0;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--md-sys-color-on-surface-variant);
+    background: var(--md-sys-color-surface-container-highest);
+    border-radius: var(--md-sys-shape-corner-full) 0 0 var(--md-sys-shape-corner-full);
+    box-shadow: var(--md-sys-elevation-1);
 }
+
 .lefty #handle {
     left: auto;
-    right: -1em;
-    border-radius: 0 0 0.25em 0;
+    right: -15px;
+    border-radius: 0 var(--md-sys-shape-corner-full) var(--md-sys-shape-corner-full) 0;
 }
-.vanish #handle, video.vanish, canvas.vanish {
-    display: none !important;
-}
-#settings h2 {
-    font-size: 1.2em;
+
+/* --------------------------------------------------------------------------
+   4. Components: checkbox rows
+   -------------------------------------------------------------------------- */
+#settings label.row {
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    min-height: 48px;
     margin: 0;
-    text-align: center;
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--md-sys-color-on-surface);
+    border-radius: var(--md-sys-shape-corner-m);
+    transition: background-color var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
 }
-#settings h3 {
-    font-size: 1em;
-    margin-top: 0.2;
-    text-align: center;
+
+#settings label.row:hover {
+    background: var(--md-sys-state-hover-layer);
 }
-#settings section {
-    margin-bottom: 1em;
+
+#settings label.row > input[type='checkbox'] {
+    margin-right: 14px;
 }
-#settings section label, section button {
+
+#settings label.row > span {
+    flex: 1 1 auto;
+}
+
+#settings label.row small {
     display: block;
-    margin-top: 0.5em;
+    margin-top: 2px;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--md-sys-color-on-surface-variant);
 }
-#settings section.hide, section label.hide, section button.hide, #debug_overlay.hide {
-    display: none !important;
+
+#settings input[type='checkbox'] {
+    position: relative;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    appearance: none;
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    vertical-align: middle;
+    background: transparent;
+    border: 2px solid var(--md-sys-color-outline);
+    border-radius: var(--md-sys-shape-corner-xs);
+    transition:
+        background-color 120ms var(--md-sys-motion-easing-standard),
+        border-color 120ms var(--md-sys-motion-easing-standard);
 }
-select {
-    width: 15em;
+
+#settings input[type='checkbox']:checked {
+    background: var(--md-sys-color-primary);
+    border-color: var(--md-sys-color-primary);
 }
+
+#settings input[type='checkbox']:checked::after {
+    content: "";
+    position: absolute;
+    left: 5px;
+    top: 1px;
+    width: 6px;
+    height: 11px;
+    border: solid var(--md-sys-color-on-primary);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+#settings input[type='checkbox']:disabled {
+    border-color: var(--md-sys-color-disabled);
+}
+
+#settings input[type='checkbox']:disabled:checked {
+    background: var(--md-sys-color-disabled);
+    border-color: transparent;
+}
+
+/* lib.js hides the "swap sides" checkbox, the label is the hit target */
+#settings #lefty {
+    display: none;
+}
+
+#settings label input:disabled + span {
+    color: var(--md-sys-color-on-surface);
+    opacity: .38;
+}
+
+/* --------------------------------------------------------------------------
+   5. Components: sliders / fields
+   -------------------------------------------------------------------------- */
+#settings .field {
+    padding: 6px 14px 12px;
+}
+
+#settings .field > label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 12px;
+    line-height: 16px;
+    letter-spacing: .03125em;
+    color: var(--md-sys-color-on-surface-variant);
+}
+
+#settings .field > label small {
+    display: block;
+    margin-top: 2px;
+    opacity: .85;
+}
+
+#settings .slider {
+    display: flex;
+    align-items: center;
+}
+
+#settings input[type='range'] {
+    flex: 1 1 auto;
+    appearance: none;
+    -webkit-appearance: none;
+    width: 100%;
+    height: 28px;
+    margin: 0 10px 0 0;
+    background: transparent;
+}
+
+#settings input[type='range']::-webkit-slider-runnable-track {
+    height: 16px;
+    border: none;
+    border-radius: var(--md-sys-shape-corner-full);
+    background: var(--md-sys-color-primary-container);
+}
+
+#settings input[type='range']::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 6px;
+    height: 28px;
+    margin-top: -6px;
+    border: none;
+    border-radius: var(--md-sys-shape-corner-full);
+    background: var(--md-sys-color-primary);
+}
+
+#settings input[type='range']::-moz-range-track {
+    height: 16px;
+    border: none;
+    border-radius: var(--md-sys-shape-corner-full);
+    background: var(--md-sys-color-primary-container);
+}
+
+#settings input[type='range']::-moz-range-thumb {
+    width: 6px;
+    height: 28px;
+    border: none;
+    border-radius: var(--md-sys-shape-corner-full);
+    background: var(--md-sys-color-primary);
+}
+
+#settings .slider output {
+    flex: 0 0 auto;
+    margin-right: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--md-sys-color-on-surface);
+}
+
+#settings .slider .unit {
+    flex: 0 0 auto;
+    font-size: 12px;
+    color: var(--md-sys-color-on-surface-variant);
+}
+
+/* --------------------------------------------------------------------------
+   6. Components: text field / select / buttons
+   -------------------------------------------------------------------------- */
+#settings select,
+#settings input[type='text'] {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 56px;
+    margin: 0;
+    padding: 8px 16px;
+    font-family: inherit;
+    font-size: 16px;
+    line-height: 24px;
+    color: var(--md-sys-color-on-surface);
+    background-color: var(--md-sys-color-surface-container-highest);
+    background-repeat: no-repeat;
+    border: none;
+    border-bottom: 1px solid var(--md-sys-color-outline);
+    border-radius: var(--md-sys-shape-corner-s) var(--md-sys-shape-corner-s) var(--md-sys-shape-corner-xs) var(--md-sys-shape-corner-xs);
+    outline: none;
+    transition: border-color var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+}
+
+#settings select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 44px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2379747e'><path d='M7.4 8.6 12 13.2l4.6-4.6 1.4 1.4-6 6-6-6z'/></svg>");
+    background-position: right 12px center;
+    background-size: 22px 22px;
+}
+
+#settings select:focus,
+#settings input[type='text']:focus {
+    border-bottom-color: var(--md-sys-color-primary);
+    border-bottom-width: 2px;
+}
+
+#settings .actions {
+    display: flex;
+    flex-direction: column;
+    padding: 8px 14px 12px;
+}
+
+#settings .actions button + button {
+    margin-top: 8px;
+}
+
+#settings button {
+    appearance: none;
+    -webkit-appearance: none;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 40px;
+    margin: 0;
+    padding: 0 24px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: .0071428571em;
+    cursor: pointer;
+    border: none;
+    border-radius: var(--md-sys-shape-corner-full);
+    background: var(--md-sys-color-primary);
+    color: var(--md-sys-color-on-primary);
+    box-shadow: var(--md-sys-elevation-0);
+    transition: box-shadow var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+}
+
+#settings button:hover {
+    box-shadow: var(--md-sys-elevation-1);
+}
+
+#settings button:active {
+    box-shadow: var(--md-sys-elevation-0);
+}
+
+#settings button.tonal {
+    background: var(--md-sys-color-secondary-container);
+    color: var(--md-sys-color-on-secondary-container);
+}
+
+/* --------------------------------------------------------------------------
+   7. Special sections
+   -------------------------------------------------------------------------- */
 #displayoptions {
     display: flex;
     flex-direction: row;
+    padding: 12px 10px;
 }
+
 .lefty #displayoptions {
     flex-direction: row-reverse;
 }
+
 #displayoptions label {
-    flex-grow: 1;
+    flex: 1 1 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-height: 40px;
+    margin: 0 4px;
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+    cursor: pointer;
+    color: var(--md-sys-color-primary);
+    background: var(--md-sys-color-secondary-container);
+    border-radius: var(--md-sys-shape-corner-full);
 }
-label input:disabled + span {
-    color: #888;
-}
-#frame_update_limit {
-    width: auto;
-}
-#lefty {
-    display: none;
-}
+
 #leftylabel::before {
     content: "❮ ";
 }
+
 .lefty #leftylabel {
     text-align: right;
 }
+
 .lefty #leftylabel::before {
     content: "";
 }
+
 .lefty #leftylabel::after {
     content: " ❯";
 }
-#vanish {
-    text-align: right;
+
+#stats_section .stat {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 14px 10px;
+    font-size: 14px;
+    color: var(--md-sys-color-on-surface-variant);
 }
-.lefty #vanish {
-    text-align: left;
+
+#stats_section output {
+    font-size: 20px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--md-sys-color-primary);
 }
+
+#fps {
+    width: auto;
+}
+
+#log_section {
+    padding-bottom: 14px;
+}
+
+#log_section > label {
+    display: block;
+    padding: 0 14px;
+    font-size: 12px;
+    letter-spacing: .03125em;
+    color: var(--md-sys-color-on-surface-variant);
+}
+
 #log {
-    max-width: 15em;
-    overflow-x: auto;
+    max-width: 100%;
+    max-height: 14em;
+    margin: 6px 0 0;
+    padding: 12px;
+    box-sizing: border-box;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
     touch-action: pan-x pan-y;
     user-select: text;
     -webkit-touch-callout: default;
@@ -184,11 +675,20 @@ label input:disabled + span {
     -khtml-user-select: text;
     -moz-user-select: text;
     -ms-user-select: text;
+    font-family: var(--md-sys-typescale-mono-font);
+    font-size: 11px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--md-sys-color-on-surface-variant);
+    background: var(--md-sys-color-surface-container);
+    border-radius: var(--md-sys-shape-corner-s);
 }
+
 #debug_overlay {
-    --padding: 3px;
+    --padding: 8px;
     position: absolute;
-    top:0;
+    top: 0;
     bottom: 0;
     left: 0;
     right: 0;
@@ -197,13 +697,127 @@ label input:disabled + span {
     height: fit-content;
     z-index: 1;
     pointer-events: none;
-    opacity: 75%;
     padding: var(--padding);
-    border: 2px solid var(--color);
+    border: 1px solid var(--md-sys-color-outline-variant);
+    border-radius: var(--md-sys-shape-corner-m);
+    box-shadow: var(--md-sys-elevation-2);
+    background: var(--md-sys-color-surface-container-high);
+    opacity: 92%;
     white-space: pre;
     font-size: small;
     text-align: center;
 }
+
 #debug_overlay span.updated {
-    color: darkgreen;
+    color: var(--md-sys-color-primary);
+}
+
+/* --------------------------------------------------------------------------
+   8. Access code page
+   -------------------------------------------------------------------------- */
+.container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 16px;
+    box-sizing: border-box;
+}
+
+.login-card {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    width: 24em;
+    max-width: 92vw;
+    padding: 32px 24px;
+    font-family: var(--md-sys-typescale-font);
+    color: var(--md-sys-color-on-surface);
+    background: var(--md-sys-color-surface-container-low);
+    border-radius: var(--md-sys-shape-corner-3xl);
+    box-shadow: var(--md-sys-elevation-2);
+}
+
+.login-card > * + * {
+    margin-top: 18px;
+}
+
+.login-title {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 400;
+    line-height: 36px;
+    text-align: center;
+    color: var(--md-sys-color-primary);
+}
+
+.login-subtitle {
+    margin: -8px 0 0;
+    font-size: 14px;
+    line-height: 20px;
+    text-align: center;
+    color: var(--md-sys-color-on-surface-variant);
+}
+
+.login-card input[type='text'] {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 56px;
+    margin: 0;
+    padding: 8px 16px;
+    font-family: inherit;
+    font-size: 16px;
+    color: var(--md-sys-color-on-surface);
+    background: var(--md-sys-color-surface-container-highest);
+    border: none;
+    border-bottom: 1px solid var(--md-sys-color-outline);
+    border-radius: var(--md-sys-shape-corner-s) var(--md-sys-shape-corner-s) var(--md-sys-shape-corner-xs) var(--md-sys-shape-corner-xs);
+    outline: none;
+}
+
+.login-card input[type='text']:focus {
+    border-bottom-color: var(--md-sys-color-primary);
+    border-bottom-width: 2px;
+}
+
+.login-card button {
+    appearance: none;
+    -webkit-appearance: none;
+    min-height: 40px;
+    margin: 0;
+    padding: 0 24px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: .0071428571em;
+    cursor: pointer;
+    border: none;
+    border-radius: var(--md-sys-shape-corner-full);
+    background: var(--md-sys-color-primary);
+    color: var(--md-sys-color-on-primary);
+}
+
+/* --------------------------------------------------------------------------
+   9. State classes consumed by lib.js — keep these last and !important
+   -------------------------------------------------------------------------- */
+.hide {
+    display: none !important;
+}
+
+.vanish #handle,
+video.vanish,
+canvas.vanish {
+    display: none !important;
+}
+
+#settings.hide,
+#settings.vanish {
+    transform: translateX(100%);
+    opacity: 40%;
+}
+
+#settings.hide.lefty,
+#settings.vanish.lefty {
+    transform: translateX(-100%);
 }
