@@ -50,6 +50,7 @@ gtk4 = { version = "0.11", features = ["v4_8"] }
 libadwaita = { version = "0.9", features = ["v1_5"] }
 gstreamer-app = { version = "^0.24", features = ["v1_16"] }
 gstreamer-video = "^0.24"
+x11 = { version = "2.21", features = ["xlib", "xtest"] }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 pnet_datalink = "^0.35"

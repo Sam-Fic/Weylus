@@ -2928,6 +2928,7 @@ dependencies = [
  "url",
  "winapi",
  "wio",
+ "x11",
 ]
 
 [[package]]

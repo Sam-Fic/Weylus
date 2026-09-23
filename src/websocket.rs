@@ -7,7 +7,7 @@ use std::sync::{mpsc, Arc};
 use std::thread::{spawn, JoinHandle};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::channel;
-use tracing::{error, trace, warn};
+use tracing::{debug, error, trace, warn};
 
 use crate::capturable::{get_capturables, Capturable, Recorder};
 use crate::input::device::{InputDevice, InputDeviceType};
@@ -242,23 +242,47 @@ impl<S, R, FnUInput> WeylusClientHandler<S, R, FnUInput> {
                             if let CErrorCode::UInputNotAccessible = e.to_enum() {
                                 (self.on_uinput_inaccessible)();
                             }
-                            self.send_message(MessageOutbound::ConfigError(
-                                "Failed to create uinput device!".to_string(),
-                            ));
-                            return;
+                            // Try to fall back to XTest
+                            debug!("Attempting to use XTest as fallback");
+                            match crate::input::xtest_device::XTestDevice::new(capturable.clone()) {
+                                Ok(xtest_device) => {
+                                    debug!("Successfully created XTest device as fallback");
+                                    self.input_device = Some(Box::new(xtest_device));
+                                }
+                                Err(xtest_err) => {
+                                    error!("Failed to create XTest device: {}", xtest_err);
+                                    self.send_message(MessageOutbound::ConfigError(
+                                        format!("Failed to create input device! uinput: {}, xtest: {}", e, xtest_err),
+                                    ));
+                                    return;
+                                }
+                            }
                         }
                     }
                 } else if let Some(d) = self.input_device.as_mut() {
                     d.set_capturable(capturable.clone());
                 }
-            } else if self.input_device.as_ref().map_or(true, |d| {
-                d.device_type() != InputDeviceType::AutoPilotDevice
-            }) {
-                self.input_device = Some(Box::new(
-                    crate::input::autopilot_device::AutoPilotDevice::new(capturable.clone()),
-                ));
-            } else if let Some(d) = self.input_device.as_mut() {
-                d.set_capturable(capturable.clone());
+            } else {
+                // When uinput_support is false, try XTest first, then fall back to AutoPilot
+                if self.input_device.as_ref().map_or(true, |d| {
+                    client_name_changed || (d.device_type() != InputDeviceType::XTestDevice && d.device_type() != InputDeviceType::AutoPilotDevice)
+                }) {
+                    // Try XTest first
+                    match crate::input::xtest_device::XTestDevice::new(capturable.clone()) {
+                        Ok(xtest_device) => {
+                            debug!("Using XTest device for input");
+                            self.input_device = Some(Box::new(xtest_device));
+                        }
+                        Err(e) => {
+                            debug!("XTest not available ({}), falling back to AutoPilot", e);
+                            self.input_device = Some(Box::new(
+                                crate::input::autopilot_device::AutoPilotDevice::new(capturable.clone()),
+                            ));
+                        }
+                    }
+                } else if let Some(d) = self.input_device.as_mut() {
+                    d.set_capturable(capturable.clone());
+                }
             }
 
             #[cfg(target_os = "macos")]
