@@ -26,7 +26,7 @@
 #include <va/va.h>
 #endif
 
-const AVRational TIME_BASE = (AVRational){1, 1000};
+#define TIME_BASE ((AVRational){1, 1000})
 
 typedef struct ScaleContext
 {
