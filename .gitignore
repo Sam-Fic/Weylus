@@ -10,3 +10,8 @@ c_helper/Cargo.lock
 *.js
 *.js.map
 *.tar.gz
+
+# Local backups and tooling
+/src_backup/
+/www_backup/
+/.codebuddy/
