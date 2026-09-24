@@ -34,6 +34,14 @@ lack of testing:
 * [new frontend: click-to-reconnect + accurate coordinates on HiDPI pad](https://github.com/H-M-H/Weylus/pull/290)
 * [feat: virtual keyboard](https://github.com/H-M-H/Weylus/pull/291)
 
+### Changes in this fork (by Sam-Fic)
+
+This fork builds on the community edition and additionally:
+
+* **WebUI refresh with Material Design 3 Expressive**: the web client (`www/templates/index.html`, `ts/lib.ts`) was restyled using the Material Design 3 Expressive (M3E) web components — a theme provider (`<m3e-theme>`) and a modal side-sheet drawer (`<m3e-drawer-container>`) for the settings panel, which now starts closed so the drawing surface is immediately usable. Pointer-input handling was also hardened: coalesced `PointerEvent`s fall back to the original event when empty (preventing dropped input), `setPointerCapture`/`preventDefault` were removed so the modal scrim no longer swallows strokes, and the minimum-pressure value is coerced to a number to avoid `NaN` pressure.
+* **Native GTK 4 / libadwaita main window polish**: the Linux application window (`src/gui_gtk.rs`) was updated to use GNOME's Adwaita widget library (`libadwaita` `PreferencesGroup`/`ExpanderRow`) and a small CSS provider that makes the log view's background transparent so it blends with the expander instead of rendering a separate card.
+* **XTest input support**: added a `libXtst`-based XTest input device as a fallback for `uinput` on Linux, so stylus/touch and multi-touch work even when `/dev/uinput` is not writable (cherry-picked from `icepie/Weylus`).
+* **Merged community contributions**: pulled in improvements from [`electronstudio/WeylusCommunityEdition`](https://github.com/electronstudio/WeylusCommunityEdition) (macOS stylus pressure, helper window in main thread, static libva / ffmpeg 7.0 build fixes, new metainfo & icon) and from `icepie/Weylus`.
 
 ![Build](https://github.com/H-M-H/Weylus/workflows/Build/badge.svg)
 
@@ -42,6 +50,10 @@ Weylus turns your tablet or smart phone into a graphic tablet/touch screen for y
 Weylus in action with [Xournal++](https://github.com/xournalpp/xournalpp):
 
 ![Weylus in action](In_action.gif)
+
+Weylus main window:
+
+![Weylus screenshot](screenshot.png)
 
 ## Table of Contents
 * [Features](#features)
