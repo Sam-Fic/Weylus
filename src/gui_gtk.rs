@@ -142,7 +142,8 @@ fn build_window(
     let css_provider = gtk4::CssProvider::new();
     css_provider.load_from_data(
         ".log-transparent, .log-transparent text, .log-transparent > * { \
-             background-color: transparent; background-image: none; }",
+             background-color: transparent; background-image: none; } \
+         .qr-white { background-color: #ffffff; border-radius: 12px; padding: 12px; }",
     );
     if let Some(display) = gtk4::gdk::Display::default() {
         gtk4::style_context_add_provider_for_display(
@@ -206,7 +207,7 @@ fn build_window(
         .width_request(QR_SIZE)
         .height_request(QR_SIZE)
         .build();
-    qr_picture.add_css_class("card");
+    qr_picture.add_css_class("qr-white");
 
     let group_connection = adw::PreferencesGroup::builder()
         .title("Connection")
