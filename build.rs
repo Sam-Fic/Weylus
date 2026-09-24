@@ -18,6 +18,14 @@ fn build_ffmpeg(dist_dir: &Path, enable_libnpp: bool) {
         .current_dir("deps")
         .env("DIST", dist_dir)
         .env("ENABLE_LIBNPP", if enable_libnpp { "y" } else { "n" })
+        .env(
+            "ENABLE_VAAPI",
+            if env::var("CARGO_FEATURE_VAAPI").is_ok() {
+                "y"
+            } else {
+                "n"
+            },
+        )
         .status()
         .expect("Failed to run bash!")
         .success()
@@ -29,11 +37,16 @@ fn build_ffmpeg(dist_dir: &Path, enable_libnpp: bool) {
 
 fn main() {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+    let vaapi_enabled = env::var("CARGO_FEATURE_VAAPI").is_ok();
 
     let dist_dir = Path::new("deps")
         .canonicalize()
         .unwrap()
-        .join(format!("dist_{}", target_os));
+        .join(if vaapi_enabled {
+            format!("dist_{}_vaapi", target_os)
+        } else {
+            format!("dist_{}", target_os)
+        });
 
     let enable_libnpp = env::var("I_AM_BUILDING_THIS_AT_HOME_AND_WANT_LIBNPP").map_or(false, |v| {
         ["y", "yes", "true", "1"].contains(&v.to_lowercase().as_str())
@@ -43,15 +56,23 @@ fn main() {
         build_ffmpeg(&dist_dir, enable_libnpp);
     }
 
+    println!("cargo:rerun-if-changed=deps/build.sh");
+    println!("cargo:rerun-if-changed=deps/ffmpeg.sh");
+    println!("cargo:rerun-if-changed=deps/libva.sh");
+    println!("cargo:rerun-if-changed=deps/x264.sh");
+    println!("cargo:rerun-if-changed=deps/nv-codec-headers.sh");
+    println!("cargo:rerun-if-env-changed=ENABLE_VAAPI");
+    println!("cargo:rerun-if-env-changed=ENABLE_LIBNPP");
+
     println!("cargo:rerun-if-changed=ts/lib.ts");
 
     #[cfg(not(target_os = "windows"))]
     let mut tsc_command = Command::new("tsc");
 
     #[cfg(target_os = "windows")]
-    let mut tsc_command = Command::new("bash");
+    let mut tsc_command = Command::new("cmd");
     #[cfg(target_os = "windows")]
-    tsc_command.args(&["-c", "tsc"]);
+    tsc_command.args(&["/c", "tsc"]);
 
     let js_needs_update = || -> Result<bool, Box<dyn std::error::Error>> {
         Ok(Path::new("ts/lib.ts").metadata()?.modified()?
@@ -84,7 +105,7 @@ fn main() {
     if ["linux", "windows"].contains(&target_os.as_str()) {
         cc_video.define("HAS_NVENC", None);
     }
-    if target_os == "linux" {
+    if target_os == "linux" && vaapi_enabled {
         cc_video.define("HAS_VAAPI", None);
     }
     if target_os == "macos" {
@@ -179,14 +200,16 @@ fn linux() {
     println!("cargo:rustc-link-lib=Xfixes");
     println!("cargo:rustc-link-lib=Xcomposite");
     println!("cargo:rustc-link-lib=Xi");
-    let va_link_kind = if env::var("CARGO_FEATURE_VA_STATIC").is_ok() {
-        "static"
-    } else {
-        "dylib"
-    };
-    println!("cargo:rustc-link-lib={}=va", va_link_kind);
-    println!("cargo:rustc-link-lib={}=va-drm", va_link_kind);
-    println!("cargo:rustc-link-lib={}=va-x11", va_link_kind);
+    if env::var("CARGO_FEATURE_VAAPI").is_ok() {
+        let va_link_kind = if env::var("CARGO_FEATURE_VA_STATIC").is_ok() {
+            "static"
+        } else {
+            "dylib"
+        };
+        println!("cargo:rustc-link-lib={}=va", va_link_kind);
+        println!("cargo:rustc-link-lib={}=va-drm", va_link_kind);
+        println!("cargo:rustc-link-lib={}=va-x11", va_link_kind);
+    }
     println!("cargo:rustc-link-lib=drm");
     println!("cargo:rustc-link-lib=xcb-dri3");
     println!("cargo:rustc-link-lib=X11-xcb");

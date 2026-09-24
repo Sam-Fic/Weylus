@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::boxed::Box;
 use std::error::Error;
 use std::ffi::c_void;
@@ -45,6 +46,10 @@ impl CGDisplayCapturable {
 }
 
 impl Capturable for CGDisplayCapturable {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
     fn name(&self) -> String {
         format!(
             "Monitor (CG, {}x{})",
@@ -172,6 +177,10 @@ impl CGWindowCapturable {
 }
 
 impl Capturable for CGWindowCapturable {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
     fn name(&self) -> String {
         self.name.clone()
     }

@@ -1,13 +1,13 @@
 [package]
 name = "weylus"
-version = "0.11.4"
+version = "2026.5.22"
 authors = ["HMH <henry@freedesk.net>"]
 license = "AGPL-3.0-or-later"
 edition = "2021"
 description = "Use your iPad or Android tablet as graphic tablet."
 
 [dependencies]
-autopilot = { git = "https://github.com/H-M-H/autopilot-rs.git", rev = "63eed09c715bfb665bb23172a3930a528e11691c" }
+autopilot = { git = "https://github.com/lyonbot/autopilot-rs.git", rev = "a92b41edb4818d0d4b4289d49e65420dbe9ab081", version = "0.4.0" }
 bitflags = { version = "^2.6", features = ["serde"] }
 bytes = "1.7.1"
 clap = { version = "4.5.18", features = ["derive"] }
@@ -22,6 +22,7 @@ hyper = { version = "^1.4", features = ["server", "http1", "http2"] }
 hyper-util = { version = "0.1.8", features = ["tokio"] }
 image = { version = "^0.25", features = ["png"], default-features = false }
 image_autopilot = { package = "image", version = "0.22.5", features = [], default-features = false }
+libc = "0.2"
 percent-encoding = "2.1.0"
 qrcode = "0.14.0"
 rand = "0.8.5"
@@ -45,11 +46,17 @@ num_cpus = "^1.16"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = "^0.9"
+drm = "0.14"
+drm-ffi = "0.9"
+drm-fourcc = "2.2"
 gstreamer = "^0.24"
 gtk4 = { version = "0.11", features = ["v4_8"] }
 libadwaita = { version = "0.9", features = ["v1_5"] }
 gstreamer-app = { version = "^0.24", features = ["v1_16"] }
 gstreamer-video = "^0.24"
+linux-raw-sys = "0.4"
+rustix = { version = "0.38", features = ["mm"] }
+x11 = { version = "2.21", features = ["xlib", "xtest"] }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 pnet_datalink = "^0.35"
@@ -61,7 +68,8 @@ core-graphics = "^0.24"
 [features]
 bench = []
 ffmpeg-system = []
-va-static = []
+vaapi = []
+va-static = ["vaapi"]
 
 [package.metadata.bundle]
 name = "Weylus"
@@ -78,5 +86,5 @@ assets = [
 ]
 
 [profile.release]
-lto = true
+lto = "thin"
 opt-level = 3

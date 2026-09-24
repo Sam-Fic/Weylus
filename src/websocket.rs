@@ -7,7 +7,7 @@ use std::sync::{mpsc, Arc};
 use std::thread::{spawn, JoinHandle};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::channel;
-use tracing::{error, trace, warn};
+use tracing::{debug, error, trace, warn};
 
 use crate::capturable::{get_capturables, Capturable, Recorder};
 use crate::input::device::{InputDevice, InputDeviceType};
@@ -43,6 +43,19 @@ where
     }
 }
 
+#[cfg(target_os = "linux")]
+fn has_x_display() -> bool {
+    std::env::var_os("DISPLAY").is_some()
+}
+
+#[cfg(target_os = "linux")]
+fn try_wayland_portal_input_device(
+    capturable: Box<dyn Capturable>,
+) -> Result<Box<dyn InputDevice>, String> {
+    crate::input::wayland_portal_device::WaylandPortalDevice::new(capturable)
+        .map(|device| Box::new(device) as Box<dyn InputDevice>)
+}
+
 pub struct WeylusClientHandler<S, R, FnUInput> {
     sender: S,
     receiver: Option<R>,
@@ -57,11 +70,15 @@ pub struct WeylusClientHandler<S, R, FnUInput> {
     video_thread: JoinHandle<()>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct WeylusClientConfig {
     pub encoder_options: EncoderOptions,
     #[cfg(target_os = "linux")]
     pub wayland_support: bool,
+    #[cfg(target_os = "linux")]
+    pub kms_support: bool,
+    #[cfg(target_os = "linux")]
+    pub kms_device: Option<String>,
     pub no_gui: bool,
 }
 
@@ -200,6 +217,10 @@ impl<S, R, FnUInput> WeylusClientHandler<S, R, FnUInput> {
             self.config.wayland_support,
             #[cfg(target_os = "linux")]
             self.capture_cursor,
+            #[cfg(target_os = "linux")]
+            self.config.kms_support,
+            #[cfg(target_os = "linux")]
+            self.config.kms_device.as_deref(),
         );
         self.capturables.iter().for_each(|c| {
             windows.push(c.name());
@@ -220,6 +241,11 @@ impl<S, R, FnUInput> WeylusClientHandler<S, R, FnUInput> {
         };
         if config.capturable_id < self.capturables.len() {
             let capturable = self.capturables[config.capturable_id].clone();
+            debug!(
+                "Selected capturable[{}]: {}",
+                config.capturable_id,
+                capturable.name()
+            );
 
             #[cfg(target_os = "linux")]
             {
@@ -227,38 +253,113 @@ impl<S, R, FnUInput> WeylusClientHandler<S, R, FnUInput> {
             }
 
             #[cfg(target_os = "linux")]
-            if config.uinput_support {
-                if self.input_device.as_ref().map_or(true, |d| {
-                    client_name_changed || d.device_type() != InputDeviceType::UInputDevice
-                }) {
-                    let device = crate::input::uinput_device::UInputDevice::new(
-                        capturable.clone(),
-                        &self.client_name,
-                    );
-                    match device {
-                        Ok(d) => self.input_device = Some(Box::new(d)),
-                        Err(e) => {
-                            error!("Failed to create uinput device: {}", e);
-                            if let CErrorCode::UInputNotAccessible = e.to_enum() {
-                                (self.on_uinput_inaccessible)();
+            {
+                let mut portal_selected = false;
+                if crate::input::wayland_portal_device::WaylandPortalDevice::supports_capturable(
+                    capturable.as_ref(),
+                ) {
+                    if self.input_device.as_ref().map_or(true, |d| {
+                        client_name_changed
+                            || d.device_type() != InputDeviceType::WaylandPortalDevice
+                    }) {
+                        match try_wayland_portal_input_device(capturable.clone()) {
+                            Ok(device) => {
+                                debug!("Using Wayland portal RemoteDesktop device for input");
+                                self.input_device = Some(device);
+                                portal_selected = true;
                             }
-                            self.send_message(MessageOutbound::ConfigError(
-                                "Failed to create uinput device!".to_string(),
-                            ));
-                            return;
+                            Err(err) => {
+                                warn!(
+                                    "Failed to create Wayland portal input device, falling back to legacy backends: {}",
+                                    err
+                                );
+                            }
                         }
+                    } else if let Some(d) = self.input_device.as_mut() {
+                        d.set_capturable(capturable.clone());
+                        portal_selected = true;
                     }
-                } else if let Some(d) = self.input_device.as_mut() {
-                    d.set_capturable(capturable.clone());
                 }
-            } else if self.input_device.as_ref().map_or(true, |d| {
-                d.device_type() != InputDeviceType::AutoPilotDevice
-            }) {
-                self.input_device = Some(Box::new(
-                    crate::input::autopilot_device::AutoPilotDevice::new(capturable.clone()),
-                ));
-            } else if let Some(d) = self.input_device.as_mut() {
-                d.set_capturable(capturable.clone());
+
+                if !portal_selected && config.uinput_support {
+                    if self.input_device.as_ref().map_or(true, |d| {
+                        client_name_changed || d.device_type() != InputDeviceType::UInputDevice
+                    }) {
+                        let device = crate::input::uinput_device::UInputDevice::new(
+                            capturable.clone(),
+                            &self.client_name,
+                        );
+                        match device {
+                            Ok(d) => self.input_device = Some(Box::new(d)),
+                            Err(e) => {
+                                error!("Failed to create uinput device: {}", e);
+                                if let CErrorCode::UInputNotAccessible = e.to_enum() {
+                                    (self.on_uinput_inaccessible)();
+                                }
+                                // Try to fall back to XTest
+                                debug!("Attempting to use XTest as fallback");
+                                match crate::input::xtest_device::XTestDevice::new(
+                                    capturable.clone(),
+                                ) {
+                                    Ok(xtest_device) => {
+                                        debug!("Successfully created XTest device as fallback");
+                                        self.input_device = Some(Box::new(xtest_device));
+                                    }
+                                    Err(xtest_err) => {
+                                        error!("Failed to create XTest device: {}", xtest_err);
+                                        self.input_device = None;
+                                        self.send_message(MessageOutbound::Error(format!(
+                                            "Input disabled: failed to create input device (uinput: {}, xtest: {})",
+                                            e, xtest_err
+                                        )));
+                                    }
+                                }
+                            }
+                        }
+                    } else if let Some(d) = self.input_device.as_mut() {
+                        d.set_capturable(capturable.clone());
+                    }
+                } else if !portal_selected {
+                    // When uinput_support is false, try XTest first, then fall back to AutoPilot
+                    if self.input_device.as_ref().map_or(true, |d| {
+                        client_name_changed
+                            || (d.device_type() != InputDeviceType::XTestDevice
+                                && d.device_type() != InputDeviceType::AutoPilotDevice)
+                    }) {
+                        // Try XTest first
+                        match crate::input::xtest_device::XTestDevice::new(capturable.clone()) {
+                            Ok(xtest_device) => {
+                                debug!("Using XTest device for input");
+                                self.input_device = Some(Box::new(xtest_device));
+                            }
+                            Err(e) => {
+                                if has_x_display() {
+                                    debug!(
+                                        "XTest not available ({}), falling back to AutoPilot",
+                                        e
+                                    );
+                                    self.input_device = Some(Box::new(
+                                        crate::input::autopilot_device::AutoPilotDevice::new(
+                                            capturable.clone(),
+                                        ),
+                                    ));
+                                } else {
+                                    warn!(
+                                        "XTest not available ({}), DISPLAY is unset; continuing without input backend",
+                                        e
+                                    );
+                                    self.input_device = None;
+                                    self.send_message(MessageOutbound::Error(
+                                        "Input disabled: no usable Linux input backend is available."
+                                            .to_string(),
+                                    ));
+                                }
+                            }
+                        }
+                    } else if let Some(d) = self.input_device.as_mut() {
+                        d.set_capturable(capturable.clone());
+                    }
+                }
             }
 
             #[cfg(target_os = "macos")]
@@ -342,7 +443,21 @@ fn handle_video<S: WeylusSender + Clone + 'static>(
                     // This shouldn't affect other Recorder trait objects.
                     recorder = None;
                 }
-                match config.capturable.recorder(config.capture_cursor) {
+                const MAX_RETRIES: u32 = 5;
+                const RETRY_DELAY: Duration = Duration::from_millis(500);
+                let mut result = config.capturable.recorder(config.capture_cursor);
+                for attempt in 1..MAX_RETRIES {
+                    if result.is_ok() {
+                        break;
+                    }
+                    warn!(
+                        "Failed to init screen cast (attempt {}/{}), retrying...",
+                        attempt, MAX_RETRIES
+                    );
+                    std::thread::sleep(RETRY_DELAY);
+                    result = config.capturable.recorder(config.capture_cursor);
+                }
+                match result {
                     Ok(r) => {
                         recorder = Some(r);
                         max_width = config.max_width;

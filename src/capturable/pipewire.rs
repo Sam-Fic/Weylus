@@ -1,5 +1,7 @@
+use std::any::Any;
 use std::collections::HashMap;
 use std::error::Error;
+use std::io::Write;
 use std::os::unix::io::AsRawFd;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -24,10 +26,57 @@ use crate::capturable::remote_desktop_dbus::{
     OrgFreedesktopPortalScreenCast,
 };
 
+fn get_sway_rotation() -> u32 {
+    use std::io::Read;
+    let sock = match std::env::var("SWAYSOCK") {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let mut stream = match std::os::unix::net::UnixStream::connect(&sock) {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    // sway IPC: magic + len + type
+    let payload = b"GET_OUTPUTS";
+    let mut msg = b"i3-ipc".to_vec();
+    msg.extend_from_slice(&(payload.len() as u32).to_ne_bytes());
+    msg.extend_from_slice(&3u32.to_ne_bytes()); // GET_OUTPUTS = 3
+    msg.extend_from_slice(payload);
+    if stream.write_all(&msg).is_err() { return 0; }
+    let mut header = [0u8; 14];
+    if stream.read_exact(&mut header).is_err() { return 0; }
+    let len = u32::from_ne_bytes(header[6..10].try_into().unwrap_or([0;4])) as usize;
+    let mut body = vec![0u8; len];
+    if stream.read_exact(&mut body).is_err() { return 0; }
+    let s = String::from_utf8_lossy(&body);
+    // parse "transform":"90" or "270" etc
+    if let Some(pos) = s.find("\"transform\"") {
+        let rest = &s[pos+12..];
+        if let Some(start) = rest.find('"') {
+            let rest = &rest[start+1..];
+            if let Some(end) = rest.find('"') {
+                let t = &rest[..end];
+                return match t {
+                    "90" => 1,   // clockwise 90
+                    "180" => 2,
+                    "270" => 3,  // clockwise 270
+                    "flipped" => 4,
+                    "flipped-90" => 5,
+                    "flipped-180" => 6,
+                    "flipped-270" => 7,
+                    _ => 0,
+                };
+            }
+        }
+    }
+    0
+}
+
 #[derive(Debug, Clone, Copy)]
 struct PwStreamInfo {
     path: u64,
     source_type: u64,
+    size: Option<(i32, i32)>,
 }
 
 #[derive(Debug)]
@@ -55,22 +104,67 @@ impl std::fmt::Display for GStreamerError {
 impl Error for GStreamerError {}
 
 #[derive(Clone)]
+pub struct PortalRemoteDesktopSession {
+    dbus_conn: Arc<SyncConnection>,
+    session: dbus::Path<'static>,
+    devices: u32,
+}
+
+impl PortalRemoteDesktopSession {
+    pub fn connection(&self) -> Arc<SyncConnection> {
+        self.dbus_conn.clone()
+    }
+
+    pub fn session_handle(&self) -> dbus::Path<'static> {
+        self.session.clone()
+    }
+
+    pub fn devices(&self) -> u32 {
+        self.devices
+    }
+}
+
+#[derive(Clone)]
 pub struct PipeWireCapturable {
     // connection needs to be kept alive for recording
     dbus_conn: Arc<SyncConnection>,
     fd: OwnedFd,
     path: u64,
     source_type: u64,
+    size: Option<(i32, i32)>,
+    portal_session: Option<PortalRemoteDesktopSession>,
+    pub rotation: u32,
 }
 
 impl PipeWireCapturable {
-    fn new(conn: Arc<SyncConnection>, fd: OwnedFd, stream: PwStreamInfo) -> Self {
+    fn new(
+        conn: Arc<SyncConnection>,
+        fd: OwnedFd,
+        portal_session: Option<PortalRemoteDesktopSession>,
+        stream: PwStreamInfo,
+    ) -> Self {
+        let rotation = get_sway_rotation();
         Self {
             dbus_conn: conn,
             fd,
             path: stream.path,
             source_type: stream.source_type,
+            size: stream.size,
+            portal_session,
+            rotation,
         }
+    }
+
+    pub fn portal_session(&self) -> Option<PortalRemoteDesktopSession> {
+        self.portal_session.clone()
+    }
+
+    pub fn stream_id(&self) -> Option<u32> {
+        u32::try_from(self.path).ok()
+    }
+
+    pub fn logical_size(&self) -> Option<(i32, i32)> {
+        self.size
     }
 }
 
@@ -88,6 +182,10 @@ impl std::fmt::Debug for PipeWireCapturable {
 }
 
 impl Capturable for PipeWireCapturable {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
     fn name(&self) -> String {
         let type_str = match self.source_type {
             1 => "Desktop",
@@ -137,8 +235,25 @@ impl PipeWireRecorder {
         sink.set_property("drop", &true);
         sink.set_property("max-buffers", &1u32);
 
-        pipeline.add_many(&[&src, &sink])?;
-        src.link(&sink)?;
+        if capturable.rotation != 0 {
+            let flip = gst::ElementFactory::make("videoflip").build()?;
+            flip.set_property_from_str("method", match capturable.rotation {
+                1 => "counterclockwise",
+                2 => "rotate-180",
+                3 => "clockwise",
+                4 => "horizontal-flip",
+                5 => "upper-left-diagonal",
+                6 => "vertical-flip",
+                7 => "upper-right-diagonal",
+                _ => "none",
+            });
+            pipeline.add_many(&[&src, &flip, &sink])?;
+            src.link(&flip)?;
+            flip.link(&sink)?;
+        } else {
+            pipeline.add_many(&[&src, &sink])?;
+            src.link(&sink)?;
+        }
         let appsink = sink
             .dynamic_cast::<AppSink>()
             .map_err(|_| GStreamerError("Sink element is expected to be an appsink!".into()))?;
@@ -345,6 +460,12 @@ fn streams_from_response(response: &OrgFreedesktopPortalRequestResponse) -> Vec<
                         source_type: attributes
                             .get("source_type")
                             .map_or(Some(0), |v| v.as_u64())?,
+                        size: attributes.get("size").and_then(|value| {
+                            let mut iter = value.as_iter()?;
+                            let width = iter.next()?.as_i64()? as i32;
+                            let height = iter.next()?.as_i64()? as i32;
+                            Some((width, height))
+                        }),
                     })
                 })
                 .collect::<Vec<PwStreamInfo>>(),
@@ -362,6 +483,7 @@ struct CallBackContext {
     fd: Option<OwnedFd>,
     restore_token: Option<String>,
     has_remote_desktop: bool,
+    devices: u32,
     failure: bool,
 }
 
@@ -459,7 +581,14 @@ fn select_sources(
     // 1: Hidden. The cursor is not part of the screen cast stream.
     // 2: Embedded: The cursor is embedded as part of the stream buffers.
     // 4: Metadata: The cursor is not part of the screen cast stream, but sent as PipeWire stream metadata.
-    let cursor_mode = if capture_cursor { 2u32 } else { 1u32 };
+    let available_cursor_modes = portal.available_cursor_modes().unwrap_or(0);
+    let cursor_mode = if capture_cursor {
+        if available_cursor_modes & 2 != 0 { Some(2u32) } else { None }
+    } else {
+        if available_cursor_modes & 1 != 0 { Some(1u32) }
+        else if available_cursor_modes & 2 != 0 { Some(2u32) }
+        else { None }
+    };
 
     let is_plasma = std::env::var("DESKTOP_SESSION").map_or(false, |s| s.contains("plasma"));
     if is_plasma && capture_cursor {
@@ -472,7 +601,13 @@ fn select_sources(
                     You have been warned."
         );
     }
-    args.insert("cursor_mode".into(), Variant(Box::new(cursor_mode)));
+    if let Some(mode) = cursor_mode {
+        args.insert("cursor_mode".into(), Variant(Box::new(mode)));
+    }
+
+    if let Some(token) = context.lock().unwrap().restore_token.clone() {
+        args.insert("restore_token".into(), Variant(Box::new(token)));
+    }
 
     let path = portal.select_sources(context.lock().unwrap().session.clone(), args)?;
     handle_response(portal, path, context, on_select_sources_response)?;
@@ -526,8 +661,13 @@ fn on_start_response(
         .replace(portal.open_pipe_wire_remote(session.clone(), HashMap::new())?);
     if let Some(Some(t)) = r.results.get("restore_token").map(|t| t.as_str()) {
         context.restore_token = Some(t.to_string());
+        if let Some(path) = dirs::cache_dir().map(|p| p.join("weylus_restore_token")) {
+            let _ = std::fs::write(&path, t);
+        }
     }
-    dbg!(&context.restore_token);
+    if let Some(devices) = r.results.get("devices").and_then(|v| v.as_u64()) {
+        context.devices = devices as u32;
+    }
     if context.has_remote_desktop {
         debug!("Remote Desktop Session started");
     } else {
@@ -538,7 +678,15 @@ fn on_start_response(
 
 fn request_remote_desktop(
     capture_cursor: bool,
-) -> Result<(SyncConnection, OwnedFd, Vec<PwStreamInfo>), Box<dyn Error>> {
+) -> Result<
+    (
+        SyncConnection,
+        OwnedFd,
+        Vec<PwStreamInfo>,
+        Option<(dbus::Path<'static>, u32)>,
+    ),
+    Box<dyn Error>,
+> {
     let conn = SyncConnection::new_session()?;
     let portal = get_portal(&conn);
 
@@ -547,13 +695,18 @@ fn request_remote_desktop(
     let has_remote_desktop =
         std::env::var("DESKTOP_SESSION").map_or(false, |s| s.contains("gnome"));
 
+    let restore_token_path = dirs::cache_dir()
+        .map(|p| p.join("weylus_restore_token"))
+        .and_then(|p| std::fs::read_to_string(&p).ok());
+
     let context = CallBackContext {
         capture_cursor,
         session: Default::default(),
         streams: Default::default(),
         fd: None,
-        restore_token: None,
+        restore_token: restore_token_path,
         has_remote_desktop,
+        devices: 0,
         failure: false,
     };
     let context = Arc::new(Mutex::new(context));
@@ -591,7 +744,17 @@ fn request_remote_desktop(
     }
     let context = context.lock().unwrap();
     if context.fd.is_some() && !context.streams.is_empty() {
-        Ok((conn, context.fd.clone().unwrap(), context.streams.clone()))
+        let remote_desktop = if context.has_remote_desktop {
+            Some((context.session.clone(), context.devices))
+        } else {
+            None
+        };
+        Ok((
+            conn,
+            context.fd.clone().unwrap(),
+            context.streams.clone(),
+            remote_desktop,
+        ))
     } else {
         Err(Box::new(DBusError(
             "Failed to obtain screen capture.".into(),
@@ -600,10 +763,15 @@ fn request_remote_desktop(
 }
 
 pub fn get_capturables(capture_cursor: bool) -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
-    let (conn, fd, streams) = request_remote_desktop(capture_cursor)?;
+    let (conn, fd, streams, remote_desktop) = request_remote_desktop(capture_cursor)?;
     let conn = Arc::new(conn);
+    let portal_session = remote_desktop.map(|(session, devices)| PortalRemoteDesktopSession {
+        dbus_conn: conn.clone(),
+        session,
+        devices,
+    });
     Ok(streams
         .into_iter()
-        .map(|s| PipeWireCapturable::new(conn.clone(), fd.clone(), s))
+        .map(|s| PipeWireCapturable::new(conn.clone(), fd.clone(), portal_session.clone(), s))
         .collect())
 }

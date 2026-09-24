@@ -1,5 +1,6 @@
 use crate::capturable::{Capturable, Recorder};
 use captrs::Capturer;
+use std::any::Any;
 use std::boxed::Box;
 use std::error::Error;
 use winapi::shared::windef::RECT;
@@ -26,6 +27,10 @@ impl CaptrsCapturable {
 }
 
 impl Capturable for CaptrsCapturable {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
     fn name(&self) -> String {
         format!("Desktop {} (captrs)", self.name).into()
     }

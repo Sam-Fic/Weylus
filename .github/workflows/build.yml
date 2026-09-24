@@ -2,150 +2,124 @@ name: Build
 
 on:
   push:
-    branches: [ '*' ]
+    branches: ["*"]
     tags:
       - v*
   pull_request:
-    branches: [ master ]
+    branches: [master]
 
 jobs:
-  build-docker:
-    runs-on: ubuntu-latest
-    container: docker://hhmhh/weylus_build:latest
+  build-windows:
+    runs-on: windows-2022
     steps:
-    - uses: actions/checkout@v6
-    - uses: actions/cache@v5
-      with:
-        path: deps/dist*
-        key: ${{ runner.os }}-deps-${{ hashFiles('deps/*.sh', 'deps/*.patch') }}
-    - uses: actions/cache@v5
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
-    - name: Build
-      run: ./docker_build.sh
-      shell: bash
-    - name: Artifacts1
-      uses: actions/upload-artifact@v6
-      with:
-        name: linux
-        path: packages/weylus-linux.zip
-    - name: Artifacts2
-      uses: actions/upload-artifact@v6
-      with:
-        name: linux-deb
-        path: packages/Weylus*.deb
-    - name: Artifacts3
-      uses: actions/upload-artifact@v6
-      with:
-        name: windows
-        path: packages/weylus-windows.zip
-    - name: Publish
-      uses: softprops/action-gh-release@v2
-      if: startsWith(github.ref, 'refs/tags/')
-      with:
-          files: |
-            packages/weylus-linux.zip
-            packages/Weylus*.deb
-            packages/weylus-windows.zip
-          prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: |
+          choco install -y --no-progress nodejs.install
+          npm install -g typescript@5.5.4
+          choco install -y --no-progress 7zip
+          Invoke-WebRequest -Uri https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.0.1-full_build-shared.7z -OutFile ffmpeg.7z
+          7z x ffmpeg.7z
+          del .\ffmpeg-8.0.1-full_build-shared\bin\*.exe
+          $env:INCLUDE = ".\ffmpeg-8.0.1-full_build-shared\include\;" + $env:INCLUDE
+          $env:LIB = ".\ffmpeg-8.0.1-full_build-shared\lib\;" + $env:LIB
+          Invoke-WebRequest -Uri https://github.com/ShiftMediaProject/x264/releases/download/0.164.r3191/libx264_0.164.r3191_msvc17.zip -OutFile x264.zip
+          7z x x264.zip -ox264
+          $env:LIB = ".\x264\lib\x64\;" + $env:LIB
+          $env:RUSTFLAGS="$RUSTFLAGS -A dead_code -A unused_imports"
+          cargo b --features ffmpeg-system --release
+          mkdir weylus
+          cp .\ffmpeg-8.0.1-full_build-shared\bin\* weylus
+          cp .\target\release\weylus.exe weylus
+          7z a weylus_windows.7z weylus\*
+      - name: Upload 7zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: weylus_windows
+          path: weylus_windows.7z
 
-  build-docker-alpine:
-    runs-on: ubuntu-latest
-    container: docker://hhmhh/weylus_build_alpine:latest
+  build-linux:
+    runs-on: ubuntu-22.04
     steps:
-    - uses: actions/checkout@v6
-    - uses: actions/cache@v5
-      with:
-        path: deps/dist*
-        key: ${{ runner.os }}-alpine-deps-${{ hashFiles('deps/*.sh', 'deps/*.patch') }}
-    - uses: actions/cache@v5
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-alpine-cargo-${{ hashFiles('Cargo.lock') }}
-    - name: Build
-      run: RUSTFLAGS='-C target-feature=-crt-static' cargo build --release && cd target/release && tar czf weylus-linux-alpine-musl.tar.gz weylus
-      shell: bash
-    - name: Artifacts1
-      uses: actions/upload-artifact@v6
-      with:
-        name: linux-alpine-musl
-        path: target/release/weylus-linux-alpine-musl.tar.gz
-    - name: Publish
-      uses: softprops/action-gh-release@v2
-      if: startsWith(github.ref, 'refs/tags/')
-      with:
-          files: |
-            target/release/weylus-linux-alpine-musl.tar.gz
-          prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v3
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Build
+        run: |
+          sudo apt update
+          sudo apt remove libc++-dev libc++-13-dev libunwind-13-dev
+          sudo apt upgrade
+          sudo apt install -y libunwind-dev
+          sudo apt install -y nasm libx11-dev libwayland-dev wayland-protocols libdecor-0-dev libegl1-mesa-dev libgles2-mesa-dev libxext-dev libxft-dev libxinerama-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libxcursor-dev libxrender-dev libxfixes-dev libxtst-dev libxrandr-dev libxcomposite-dev libxi-dev libxv-dev autoconf libtool-bin nvidia-cuda-dev pkg-config libdrm-dev libpango1.0-dev  libdbus-1-dev libavdevice-dev libavfilter-dev libx264-dev libxkbcommon-x11-0 libxkbcommon-dev libxcb-dri3-0  libxcb-dri3-dev libx11-xcb-dev
+          sudo npm install -g typescript@5.5.4
+          cargo clean
+          RUSTFLAGS="$RUSTFLAGS -A dead_code -A unused_imports" cargo b --features "va-static,fltk/use-wayland" --release
+          mv target/release/weylus .
+          tar -czvf weylus_linux.tar.gz weylus
+      - name: Upload tar
+        uses: actions/upload-artifact@v4
+        with:
+          name: weylus_linux
+          path: weylus_linux.tar.gz
 
   build-macos:
     strategy:
       matrix:
-        os: [macos-latest, macos-15-intel] # -latest is for Apple Silicon, -15-intel is for Intel
+        os: [macos-latest, macos-15-intel] # -latest if for Apple Silicon, -13 is for Intel
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v6
-    - uses: actions/cache@v5
-      with:
-        path: deps/dist
-        key: ${{ runner.os }}-deps-${{ hashFiles('deps/*.sh', 'deps/*.patch') }}
-    - uses: actions/cache@v5
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
-    - name: Download deps
-      run: |
-        npm install -g typescript
-        brew install nasm
-        cargo install cargo-bundle
-      shell: bash
-    - name: Build
-      # run: MACOSX_DEPLOYMENT_TARGET=10.13 cargo bundle --release
-      run: cargo bundle --release
-    - name: Package
-      run: |
-        MACOS_BUILD_NAME=macos-$([ "${{ matrix.os }}" == "macos-latest" ] && echo "arm" || echo "intel")
-        echo "MACOS_BUILD_NAME=$MACOS_BUILD_NAME" >> $GITHUB_ENV
-        cd target/release/bundle/osx/ && zip -r ${MACOS_BUILD_NAME}.zip Weylus.app
-    - name: Artifacts
-      uses: actions/upload-artifact@v6
-      with:
-        name: ${{ env.MACOS_BUILD_NAME }}
-        path: target/release/bundle/osx/${{ env.MACOS_BUILD_NAME }}.zip
-    - name: ArtifactsDebug
-      if: failure()
-      uses: actions/upload-artifact@v6
-      with:
-        name: ${{ runner.os }}-ffbuild
-        path: |
-          deps/ffmpeg/ffbuild
-    - name: Debug via SSH
-      if: failure()
-      uses: luchihoratiu/debug-via-ssh@main
-      with:
-        NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
-        SSH_PASS: ${{ secrets.SSH_PASS }}
-        NGROK_REGION: eu
-    - name: Publish
-      uses: softprops/action-gh-release@v2
-      if: startsWith(github.ref, 'refs/tags/')
-      with:
+      - uses: actions/checkout@v3
+      - uses: actions/cache@v3
+        with:
+          path: deps/dist
+          key: ${{ runner.os }}-deps-${{ hashFiles('deps/*') }}
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+      - name: Download deps
+        run: |
+          npm install -g typescript@5.5.4
+          brew install nasm
+          cargo install cargo-bundle
+        shell: bash
+      - name: Build
+        # run: MACOSX_DEPLOYMENT_TARGET=10.13 cargo bundle --release
+        run: cargo bundle --release
+      - name: Package
+        run: |
+          MACOS_BUILD_NAME=weylus-macos-$([ "${{ matrix.os }}" == "macos-latest" ] && echo "arm" || echo "intel")
+          echo "MACOS_BUILD_NAME=$MACOS_BUILD_NAME" >> $GITHUB_ENV
+          cd target/release/bundle/osx/ && zip -r ${MACOS_BUILD_NAME}.zip Weylus.app
+      - name: Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.MACOS_BUILD_NAME }}
+          path: target/release/bundle/osx/${{ env.MACOS_BUILD_NAME }}.zip
+      - name: ArtifactsDebug
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ runner.os }}-ffbuild
+          path: |
+            deps/ffmpeg/ffbuild
+      - name: Debug via SSH
+        if: failure()
+        uses: luchihoratiu/debug-via-ssh@main
+        with:
+          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+          SSH_PASS: ${{ secrets.SSH_PASS }}
+          NGROK_REGION: eu
+      - name: Publish
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
           files: |
             target/release/bundle/osx/macOS.zip
           prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

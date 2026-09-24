@@ -18,6 +18,7 @@ fi
 
 [ -z "$DIST" ] && export DIST="$PWD/dist"
 [ -z "$TARGET_OS" ] && export TARGET_OS="$HOST_OS"
+[ -z "$ENABLE_VAAPI" ] && export ENABLE_VAAPI="y"
 
 export NPROCS="$(nproc || echo 4)"
 
@@ -28,13 +29,13 @@ if [ "$TARGET_OS" == "windows" ]; then
         export CROSS_COMPILE="x86_64-w64-mingw32-"
         export FFMPEG_EXTRA_ARGS="--arch=x86_64 --target-os=mingw64 \
             --cross-prefix=x86_64-w64-mingw32- --enable-nvenc --enable-ffnvcodec \
-            --enable-cuda-llvm --enable-mediafoundation --pkg-config=pkg-config --enable-d3d11va"
+            --enable-mediafoundation --pkg-config=pkg-config --enable-d3d11va"
         export FFMPEG_CFLAGS="-I$DIST/include"
         export FFMPEG_LIBRARY_PATH="-L$DIST/lib"
     else
         export CC="cl"
         export FFMPEG_EXTRA_ARGS="--toolchain=msvc --enable-nvenc --enable-ffnvcodec \
-            --enable-cuda-llvm --enable-mediafoundation --enable-d3d11va"
+            --enable-mediafoundation --enable-d3d11va"
         export FFMPEG_CFLAGS="-I$DIST/include"
         export FFMPEG_LIBRARY_PATH="-LIBPATH:$DIST/lib"
     fi
@@ -43,11 +44,16 @@ else
     export FFMPEG_LIBRARY_PATH="-L$DIST/lib"
     if [ "$TARGET_OS" == "linux" ]; then
         export FFMPEG_EXTRA_ARGS="--enable-nvenc \
-            --enable-ffnvcodec \
-            --enable-cuda-llvm \
-            --enable-vaapi \
-            --enable-libdrm \
-            --enable-xlib"
+            --enable-ffnvcodec"
+        if [ "$ENABLE_VAAPI" == "y" ]; then
+            export FFMPEG_EXTRA_ARGS="$FFMPEG_EXTRA_ARGS \
+                --enable-vaapi \
+                --enable-libdrm \
+                --enable-xlib"
+        else
+            export FFMPEG_EXTRA_ARGS="$FFMPEG_EXTRA_ARGS \
+                --disable-vaapi"
+        fi
     fi
     if [ "$TARGET_OS" == "macos" ]; then
         export FFMPEG_EXTRA_ARGS="--enable-videotoolbox"
@@ -64,7 +70,9 @@ fi
 ./x264.sh
 if [ "$TARGET_OS" == "linux" ]; then
     ./nv-codec-headers.sh
-    ./libva.sh
+    if [ "$ENABLE_VAAPI" == "y" ]; then
+        ./libva.sh
+    fi
 fi
 if [ "$TARGET_OS" == "windows" ]; then
     ./nv-codec-headers.sh

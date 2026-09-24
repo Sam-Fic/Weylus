@@ -1,4 +1,40 @@
-# Weylus
+**Please checkout my new project [Inara](https://github.com/electronstudio/desktop_remote_mobile_companion) - it does some of the same things Weylus does!**
+
+# Weylus Community Edition
+
+## New: Discord
+
+[Unofficial room to chat other Weylus users](https://discord.gg/cU88m9ubqP)
+
+## Flatpak now available
+
+https://flathub.org/apps/io.github.electronstudio.WeylusCommunityEdition
+
+## Note for MacOS
+
+After unzipping, run:
+
+    sudo xattr -dr com.apple.quarantine ~/Downloads/Weylus.app
+
+## Community Edition adds these patches
+
+* Commits from Weylus master that improve Wayland and iOS compatibility.
+* [feat: support stylus pressure in macos](https://github.com/H-M-H/Weylus/pull/289)
+* [~~Always render square QR code so it can be read~~](https://github.com/H-M-H/Weylus/pull/236) merged by master
+* [~~fix scroll direction problems in uinput~~](https://github.com/H-M-H/Weylus/pull/215) merged by master 
+* [~~Use WinAPI to simulate pointermovements](https://github.com/H-M-H/Weylus/pull/128) merged by master
+* [~~Modify write_video_packet prototype](https://github.com/H-M-H/Weylus/pull/273) merged by master
+* [Linux build fixes](https://github.com/electronstudio2/Weylus/tree/build-fixes)
+* [~~Create helper window in main thread~~](https://github.com/H-M-H/Weylus/pull/282) merged by master
+
+As you can see, we have been quite successful at getting patches upstreamed!  There are
+still these two remaining but we arent currently including them due to merge conflicts and
+lack of testing:
+
+* [new frontend: click-to-reconnect + accurate coordinates on HiDPI pad](https://github.com/H-M-H/Weylus/pull/290)
+* [feat: virtual keyboard](https://github.com/H-M-H/Weylus/pull/291)
+
+
 ![Build](https://github.com/H-M-H/Weylus/workflows/Build/badge.svg)
 
 Weylus turns your tablet or smart phone into a graphic tablet/touch screen for your computer!
@@ -50,15 +86,14 @@ features on Linux are:
 
 ## Installation
 Just grab the latest release for your OS from the
-[releases page](https://github.com/H-M-H/Weylus/releases) and install it on your computer. No apps
+[releases page](https://github.com/electronstudio/WeylusCommunityEdition/releases) and install it on your computer. No apps
 except a modern browser (Firefox 80+, iOS/iPadOS 13+) are required on your tablet. **If you run
 Linux make sure to follow the instructions described [here](#linux) to enable uinput for features
 like pressure sensitivity and multitouch!**
 
 ### Packages
-AUR packages for Weylus are available here:
-- From source: [weylus](https://aur.archlinux.org/packages/weylus/)
-- Prebuilt binary: [weylus-bin](https://aur.archlinux.org/packages/weylus-bin/)
+
+https://flathub.org/apps/io.github.electronstudio.WeylusCommunityEdition
 
 ## Running
 Start Weylus, preferably set an access code in the access code box and press the Start button. This
@@ -133,6 +168,32 @@ There are still some things that do not work:
 - input mapping for windows
 - displaying proper window names
 - capturing the cursor
+
+#### KMS/DRM
+On Linux Weylus also supports direct framebuffer capture through DRM/KMS. This is useful on
+systems without a working X11 session or without PipeWire screen casting.
+
+Enable it with the GUI checkbox `KMS/DRM Support` or start Weylus with:
+
+```sh
+weylus --kms-support
+```
+
+To restrict probing to a specific card, use for example:
+
+```sh
+weylus --kms-support --kms-device /dev/dri/card0
+```
+
+Current limitations:
+- only full-output capture is supported
+- only linear framebuffers in common 16/32-bit formats are supported
+- KMS cursor plane capture is not implemented yet
+- access to `/dev/dri/card*` is required and some drivers still require `CAP_SYS_ADMIN`
+
+For a verified `lightdm + Xorg :0 + arise` deployment note, including why KMS is not usable on that
+machine and how to target the display manager through X11 instead, see
+[`docs/DM_REMOTE_CONTROL_ARISE.md`](docs/DM_REMOTE_CONTROL_ARISE.md).
 
 #### Hardware Acceleration
 On Linux Weylus supports hardware accelerated video encoding through the Video Acceleration API
