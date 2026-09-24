@@ -55,9 +55,12 @@ fn build_window(
     let header = adw::HeaderBar::new();
     header.set_title_widget(Some(&window_title));
 
-    let button_toggle = gtk4::Button::with_label("Start");
+    let button_toggle = gtk4::Button::builder()
+        .icon_name("media-playback-start-symbolic")
+        .label("Start")
+        .build();
     button_toggle.add_css_class("suggested-action");
-    header.pack_end(&button_toggle);
+    header.pack_start(&button_toggle);
 
     // ----------------------------------------------------------- left column
     let left = gtk4::Box::builder()
@@ -282,6 +285,7 @@ fn build_window(
                 weylus.borrow_mut().stop();
                 is_running.set(false);
                 button.set_label("Start");
+                button.set_icon_name("media-playback-start-symbolic");
                 button.add_css_class("suggested-action");
                 window_title.set_subtitle("Not running");
                 status_page.set_visible(true);
@@ -333,6 +337,7 @@ fn build_window(
             write_config(&cfg);
             is_running.set(true);
             button.set_label("Stop");
+            button.set_icon_name("media-playback-stop-symbolic");
             button.remove_css_class("suggested-action");
             window_title.set_subtitle(&format!("Listening on port {}", cfg.web_port));
 
