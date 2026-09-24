@@ -1,155 +1,74 @@
 /* ==========================================================================
-   Weylus — Material 3 Expressive theme (m3e design language)
+   Weylus — layout stylesheet for the m3e (Material 3 Expressive) UI
 
-   Pure CSS reskin: no JavaScript and no Rust changes.
-   Every id / class that lib.js depends on is preserved:
-     - ids: video, canvas, settings, settings_scroll, handle, window, refresh,
-            fullscreen, enable_video, energysaving, stretch, capture_cursor,
-            aggressive_seeking, scale_video, frame_rate, enable_mouse,
-            enable_stylus, enable_touch, uinput_support, min_pressure,
-            custom_input_areas, enable_custom_input_areas, client_name,
-            leftylabel, lefty, vanish, fps, enable_debug_overlay,
-            debug_overlay, log_section, log, displayoptions, stats_section
-     - classes with semantic meaning to lib.js: .hide, .vanish, .lefty, .updated
-     - #scale_video / #frame_rate must be immediately followed by their <output>
+   All controls, including the settings side sheet, are m3e web components and
+   bring their own Material 3 Expressive look, motion and theming
+   (see <m3e-theme> and <m3e-drawer-container> in index.html). This file only
+   handles what m3e does not: the full screen video/canvas stage, the floating
+   button that opens the sheet, row layout and typography.
+
+   State classes consumed by lib.js must keep their meaning:
+     .hide    -> hidden (also used by the handlebars conditionals)
+     .vanish  -> the sheet opener is hidden until the page is reloaded
+     .lefty   -> the sheet is docked on the other side
+     .updated -> highlighted value in the debug overlay
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
-   1. Design tokens — color (light is the default, dark is a media override)
+   Spacing and shape scale.
+
+   Shapes follow Material 3's concentric rule: when a container is inset by a
+   gap x inside another container, the inner corner radius is the outer corner
+   radius minus x.
+
+     sheet   28px
+       └─ gap 12px  →  card    16px   (28 − 12)
+            └─ gap 12px  →  field / log  4px   (16 − 12)
+
+   m3e components pick these up through the --md-sys-shape-corner-* tokens and
+   the per component overrides below.
    -------------------------------------------------------------------------- */
 :root {
     color-scheme: light dark;
 
-    --md-sys-color-primary: #6750a4;
-    --md-sys-color-on-primary: #ffffff;
-    --md-sys-color-primary-container: #eaddff;
-    --md-sys-color-on-primary-container: #21005d;
+    /* spacing */
+    --gap-sheet: 12px;   /* sheet edge -> cards          */
+    --gap-card: 12px;    /* card edge -> card content    */
+    --gap-row: 8px;      /* between stacked rows         */
 
-    --md-sys-color-secondary: #625b71;
-    --md-sys-color-on-secondary: #ffffff;
-    --md-sys-color-secondary-container: #e8def8;
-    --md-sys-color-on-secondary-container: #1d192b;
+    /* shape, concentric with the gaps above */
+    --shape-sheet: 28px;
+    --shape-card: 16px;
+    --shape-inner: 4px;
 
-    --md-sys-color-tertiary: #7d5260;
-    --md-sys-color-on-tertiary: #ffffff;
-    --md-sys-color-tertiary-container: #ffd8e4;
-    --md-sys-color-on-tertiary-container: #31111d;
+    /* Publish the scale through the m3e / Material 3 system tokens so every
+       m3e component lands on the same radii. */
+    --md-sys-shape-corner-extra-small: var(--shape-inner);
+    --md-sys-shape-corner-small: 8px;
+    --md-sys-shape-corner-medium: 12px;
+    --md-sys-shape-corner-large: var(--shape-card);
+    --md-sys-shape-corner-extra-large: var(--shape-sheet);
 
-    --md-sys-color-error: #b3261e;
-    --md-sys-color-on-error: #ffffff;
-    --md-sys-color-error-container: #f9dedc;
-    --md-sys-color-on-error-container: #410e0b;
-
-    --md-sys-color-background: #f6f2f9;
-    --md-sys-color-on-background: #1d1b20;
-    --md-sys-color-surface: #fef7ff;
-    --md-sys-color-on-surface: #1d1b20;
-    --md-sys-color-surface-variant: #e7e0ec;
-    --md-sys-color-on-surface-variant: #49454f;
-    --md-sys-color-surface-container-lowest: #ffffff;
-    --md-sys-color-surface-container-low: #f7f2fa;
-    --md-sys-color-surface-container: #f3edf7;
-    --md-sys-color-surface-container-high: #ece6f0;
-    --md-sys-color-surface-container-highest: #e6e0e9;
-    --md-sys-color-outline: #79747e;
-    --md-sys-color-outline-variant: #cac4d0;
-    --md-sys-color-inverse-surface: #322f35;
-    --md-sys-color-inverse-on-surface: #f5eff7;
-    --md-sys-color-shadow: #000000;
-
-    /* state layers (plain rgba for maximum browser coverage) */
-    --md-sys-state-hover-layer: rgba(29, 27, 32, .08);
-    --md-sys-state-focus-layer: rgba(29, 27, 32, .12);
-    --md-sys-color-disabled: rgba(29, 27, 32, .38);
-
-    /* legacy aliases kept so third party templates still work */
-    --color: var(--md-sys-color-on-surface);
-    --background-color-1: var(--md-sys-color-surface-container-low);
-    --background-color-2: var(--md-sys-color-background);
-
-    /* shape */
-    --md-sys-shape-corner-xs: 4px;
-    --md-sys-shape-corner-s: 8px;
-    --md-sys-shape-corner-m: 12px;
-    --md-sys-shape-corner-l: 16px;
-    --md-sys-shape-corner-xl: 20px;
-    --md-sys-shape-corner-2xl: 28px;
-    --md-sys-shape-corner-3xl: 32px;
-    --md-sys-shape-corner-full: 9999px;
-
-    /* typography */
-    --md-sys-typescale-font: "Roboto Flex", "Roboto", "Google Sans", system-ui,
-        -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-    --md-sys-typescale-mono-font: "Roboto Mono", ui-monospace, SFMono-Regular,
-        Menlo, Consolas, monospace;
-
-    /* motion */
-    --md-sys-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
-    --md-sys-motion-easing-emphasized: cubic-bezier(0.2, 0, 0, 1);
-    --md-sys-motion-duration-short: 200ms;
-    --md-sys-motion-duration-medium: 300ms;
-    --md-sys-motion-duration-long: 500ms;
-
-    /* elevation */
-    --md-sys-elevation-0: none;
-    --md-sys-elevation-1: 0 1px 2px 0 rgba(0, 0, 0, .30), 0 1px 3px 1px rgba(0, 0, 0, .15);
-    --md-sys-elevation-2: 0 1px 2px 0 rgba(0, 0, 0, .30), 0 2px 6px 2px rgba(0, 0, 0, .15);
-    --md-sys-elevation-3: 0 4px 8px 3px rgba(0, 0, 0, .15), 0 1px 3px 0 rgba(0, 0, 0, .30);
-
-    /* state layers */
-    --md-sys-state-hover-opacity: .08;
-    --md-sys-state-focus-opacity: .12;
-    --md-sys-state-pressed-opacity: .12;
-    --md-sys-state-disabled-opacity: .38;
+    --weylus-bg: #f6f5f4;
+    --weylus-surface: #ffffff;
+    --weylus-fg: #1d1b20;
+    --weylus-fg-dim: #625b71;
+    --weylus-accent: #6750a4;
+    --weylus-outline: #cac4d0;
+    --weylus-mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
     :root {
-        --md-sys-color-primary: #d0bcff;
-        --md-sys-color-on-primary: #381e72;
-        --md-sys-color-primary-container: #4f378b;
-        --md-sys-color-on-primary-container: #eaddff;
-
-        --md-sys-color-secondary: #ccc2dc;
-        --md-sys-color-on-secondary: #332d41;
-        --md-sys-color-secondary-container: #4a4458;
-        --md-sys-color-on-secondary-container: #e8def8;
-
-        --md-sys-color-tertiary: #efb8c8;
-        --md-sys-color-on-tertiary: #492532;
-        --md-sys-color-tertiary-container: #633b48;
-        --md-sys-color-on-tertiary-container: #ffd8e4;
-
-        --md-sys-color-error: #f2b8b5;
-        --md-sys-color-on-error: #601410;
-        --md-sys-color-error-container: #8c1d18;
-        --md-sys-color-on-error-container: #f9dedc;
-
-        --md-sys-color-background: #141218;
-        --md-sys-color-on-background: #e6e0e9;
-        --md-sys-color-surface: #141218;
-        --md-sys-color-on-surface: #e6e0e9;
-        --md-sys-color-surface-variant: #49454f;
-        --md-sys-color-on-surface-variant: #cac4d0;
-        --md-sys-color-surface-container-lowest: #0f0d13;
-        --md-sys-color-surface-container-low: #1d1b20;
-        --md-sys-color-surface-container: #211f26;
-        --md-sys-color-surface-container-high: #2b2930;
-        --md-sys-color-surface-container-highest: #36343b;
-        --md-sys-color-outline: #938f99;
-        --md-sys-color-outline-variant: #49454f;
-        --md-sys-color-inverse-surface: #e6e0e9;
-        --md-sys-color-inverse-on-surface: #322f35;
-
-        --md-sys-state-hover-layer: rgba(230, 224, 233, .08);
-        --md-sys-state-focus-layer: rgba(230, 224, 233, .12);
-        --md-sys-color-disabled: rgba(230, 224, 233, .38);
+        --weylus-bg: #141218;
+        --weylus-surface: #211f26;
+        --weylus-fg: #e6e0e9;
+        --weylus-fg-dim: #cac4d0;
+        --weylus-accent: #d0bcff;
+        --weylus-outline: #49454f;
     }
 }
 
-/* --------------------------------------------------------------------------
-   2. Base / page shell
-   -------------------------------------------------------------------------- */
 * {
     -webkit-tap-highlight-color: transparent;
 }
@@ -161,17 +80,45 @@ body {
     margin: 0;
     padding: 0;
     overflow: hidden;
-    background: var(--md-sys-color-background);
-    color: var(--md-sys-color-on-background);
-    font-family: var(--md-sys-typescale-font);
+    background: var(--weylus-bg);
+    color: var(--weylus-fg);
+    font-family: Roboto, "Roboto Flex", system-ui, -apple-system, "Segoe UI", sans-serif;
     -webkit-text-size-adjust: 100%;
 }
 
-main {
-    position: relative;
+/* The drawer container fills the viewport and manages the side sheet. */
+body {
     display: flex;
-    width: 100%;
-    height: 100%;
+    flex-direction: column;
+}
+
+m3e-drawer-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    --m3e-drawer-container-width: 340px;
+    --m3e-modal-drawer-start-shape: var(--shape-sheet);
+    --m3e-modal-drawer-end-shape: var(--shape-sheet);
+}
+
+/* Cards sit --gap-sheet inside the sheet, so their radius is one step smaller
+   than the sheet's, and their content is inset by --gap-card again. */
+m3e-card {
+    --m3e-card-shape: var(--shape-card);
+    --m3e-card-padding: var(--gap-card);
+}
+
+/* Form controls are the innermost containers of the concentric scale. */
+m3e-select {
+    --m3e-select-container-shape: var(--shape-inner);
+}
+
+main {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
     margin: 0;
     padding: 0;
     overflow: hidden;
@@ -182,8 +129,6 @@ main {
     -khtml-user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;
-    color: var(--md-sys-color-on-surface);
-    background: var(--md-sys-color-background);
 }
 
 /* Mirrored video. stretch_video() in lib.js writes inline transforms here,
@@ -197,7 +142,7 @@ video {
     margin: auto auto;
 }
 
-/* Ink overlay used when video is disabled. Sized by Painter in lib.js. */
+/* Ink overlay used while video is disabled. Sized by Painter in lib.js. */
 canvas {
     position: absolute;
     top: 0;
@@ -217,474 +162,199 @@ input[type='text'] {
 }
 
 /* --------------------------------------------------------------------------
-   3. Settings side sheet
+   Floating button that opens the settings side sheet.
+
+   It sits on the same edge the sheet slides in from and fades out while the
+   sheet is open (m3e reflects the open state to the container's `start` /
+   `end` attribute, so this is pure CSS).
    -------------------------------------------------------------------------- */
-#settings,
-#handle,
-#debug_overlay {
-    color: var(--md-sys-color-on-surface);
+#drawer_open {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 5;
+    transition: opacity 200ms cubic-bezier(0.2, 0, 0, 1);
 }
 
+body.lefty #drawer_open {
+    right: auto;
+    left: 16px;
+}
+
+m3e-drawer-container[start] #drawer_open,
+m3e-drawer-container[end] #drawer_open {
+    opacity: 0;
+    pointer-events: none;
+}
+
+body.vanish #drawer_open {
+    display: none !important;
+}
+
+/* --------------------------------------------------------------------------
+   Settings side sheet
+   -------------------------------------------------------------------------- */
 #settings {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: auto;
-    z-index: 10;
-    box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    width: 21em;
-    max-width: 86vw;
-    padding: 0;
-    font-family: var(--md-sys-typescale-font);
-    background: var(--md-sys-color-surface-container-low);
-    border-radius: var(--md-sys-shape-corner-2xl) 0 0 var(--md-sys-shape-corner-2xl);
-    box-shadow: var(--md-sys-elevation-2);
-    transition:
-        transform var(--md-sys-motion-duration-long) var(--md-sys-motion-easing-emphasized),
-        opacity var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard);
+    box-sizing: border-box;
+    height: 100%;
 }
 
-#settings.lefty {
-    left: 0;
-    right: auto;
-    border-radius: 0 var(--md-sys-shape-corner-2xl) var(--md-sys-shape-corner-2xl) 0;
+#settings_header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--gap-card);
+    padding: 16px var(--gap-sheet) 12px calc(var(--gap-sheet) + var(--gap-card));
+}
+
+#settings_header h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 400;
+    line-height: 28px;
 }
 
 #settings_scroll {
     box-sizing: border-box;
     flex: 1 1 auto;
-    width: 100%;
     overflow-x: hidden;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding: 0 12px calc(24px + env(safe-area-inset-bottom, 0px));
-}
-
-#settings h2 {
-    margin: 0;
-    padding: 22px 8px 14px;
-    font-size: 22px;
-    font-weight: 400;
-    line-height: 28px;
-    letter-spacing: 0;
-    text-align: center;
-    color: var(--md-sys-color-on-surface);
+    padding: 0 var(--gap-sheet) 16px;
 }
 
 #settings h3 {
-    margin: 14px 10px 6px;
+    margin: 0 0 var(--gap-row);
+    padding: 0;
     font-size: 14px;
     font-weight: 500;
     line-height: 20px;
     letter-spacing: .0071428571em;
-    text-align: left;
-    color: var(--md-sys-color-primary);
+    color: var(--weylus-accent);
 }
 
-/* Cards */
-#settings section {
-    margin: 0 0 12px;
-    padding: 8px 4px;
-    background: var(--md-sys-color-surface-container-lowest);
-    border-radius: var(--md-sys-shape-corner-l);
-    box-shadow: var(--md-sys-elevation-1);
+m3e-card {
+    display: block;
+    margin: 0 0 var(--gap-sheet);
 }
 
-/* Drag handle that toggles the sheet */
-#handle {
-    position: absolute;
-    top: 50%;
-    left: -15px;
-    width: 15px;
-    height: 56px;
-    transform: translateY(-50%);
+/* The card applies --m3e-card-padding as margins around its named slots, so
+   the header and content are already inset by --gap-card. The content is laid
+   out as a stack with --gap-row between the rows. */
+m3e-card > [slot="content"] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-row);
+}
+
+m3e-card > [slot="content"].row-actions {
+    flex-direction: row;
+}
+
+m3e-card > h3[slot="header"] {
+    margin-bottom: var(--gap-row);
+}
+
+/* Rows: label on the left, m3e control on the right */
+.row {
     display: flex;
     align-items: center;
-    justify-content: center;
-    box-sizing: border-box;
-    padding: 0;
-    font-size: 13px;
-    line-height: 1;
-    cursor: pointer;
-    color: var(--md-sys-color-on-surface-variant);
-    background: var(--md-sys-color-surface-container-highest);
-    border-radius: var(--md-sys-shape-corner-full) 0 0 var(--md-sys-shape-corner-full);
-    box-shadow: var(--md-sys-elevation-1);
-}
-
-.lefty #handle {
-    left: auto;
-    right: -15px;
-    border-radius: 0 var(--md-sys-shape-corner-full) var(--md-sys-shape-corner-full) 0;
-}
-
-/* --------------------------------------------------------------------------
-   4. Components: checkbox rows
-   -------------------------------------------------------------------------- */
-#settings label.row {
-    display: flex;
-    align-items: center;
-    box-sizing: border-box;
+    gap: 12px;
     min-height: 48px;
-    margin: 0;
-    padding: 8px 14px;
-    cursor: pointer;
+    padding: 0;
+}
+
+.row-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.row-title {
+    display: block;
     font-size: 14px;
     line-height: 20px;
-    color: var(--md-sys-color-on-surface);
-    border-radius: var(--md-sys-shape-corner-m);
-    transition: background-color var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+    color: var(--weylus-fg);
 }
 
-#settings label.row:hover {
-    background: var(--md-sys-state-hover-layer);
-}
-
-#settings label.row > input[type='checkbox'] {
-    margin-right: 14px;
-}
-
-#settings label.row > span {
-    flex: 1 1 auto;
-}
-
-#settings label.row small {
+.row-sub {
     display: block;
     margin-top: 2px;
     font-size: 12px;
     line-height: 16px;
-    color: var(--md-sys-color-on-surface-variant);
+    color: var(--weylus-fg-dim);
 }
 
-#settings input[type='checkbox'] {
-    position: relative;
-    box-sizing: border-box;
+.row-value {
     flex: 0 0 auto;
-    appearance: none;
-    -webkit-appearance: none;
-    width: 20px;
-    height: 20px;
-    margin: 0;
-    vertical-align: middle;
-    background: transparent;
-    border: 2px solid var(--md-sys-color-outline);
-    border-radius: var(--md-sys-shape-corner-xs);
-    transition:
-        background-color 120ms var(--md-sys-motion-easing-standard),
-        border-color 120ms var(--md-sys-motion-easing-standard);
+    font-size: 20px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--weylus-accent);
 }
 
-#settings input[type='checkbox']:checked {
-    background: var(--md-sys-color-primary);
-    border-color: var(--md-sys-color-primary);
+.row m3e-switch {
+    flex: 0 0 auto;
 }
 
-#settings input[type='checkbox']:checked::after {
-    content: "";
-    position: absolute;
-    left: 5px;
-    top: 1px;
-    width: 6px;
-    height: 11px;
-    border: solid var(--md-sys-color-on-primary);
-    border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
+/* Fields stacked above their control */
+.field {
+    padding: 0;
 }
 
-#settings input[type='checkbox']:disabled {
-    border-color: var(--md-sys-color-disabled);
-}
-
-#settings input[type='checkbox']:disabled:checked {
-    background: var(--md-sys-color-disabled);
-    border-color: transparent;
-}
-
-/* lib.js hides the "swap sides" checkbox, the label is the hit target */
-#settings #lefty {
-    display: none;
-}
-
-#settings label input:disabled + span {
-    color: var(--md-sys-color-on-surface);
-    opacity: .38;
-}
-
-/* --------------------------------------------------------------------------
-   5. Components: sliders / fields
-   -------------------------------------------------------------------------- */
-#settings .field {
-    padding: 6px 14px 12px;
-}
-
-#settings .field > label {
+.field-label {
     display: block;
-    margin-bottom: 8px;
+    margin-bottom: var(--gap-row);
     font-size: 12px;
     line-height: 16px;
     letter-spacing: .03125em;
-    color: var(--md-sys-color-on-surface-variant);
+    color: var(--weylus-fg-dim);
 }
 
-#settings .field > label small {
+.field m3e-select,
+.field m3e-form-field {
     display: block;
-    margin-top: 2px;
-    opacity: .85;
+    width: 100%;
 }
 
-#settings .slider {
+.slider-row {
     display: flex;
     align-items: center;
+    gap: 10px;
 }
 
-#settings input[type='range'] {
+.slider-row m3e-slider {
     flex: 1 1 auto;
-    appearance: none;
-    -webkit-appearance: none;
-    width: 100%;
-    height: 28px;
-    margin: 0 10px 0 0;
-    background: transparent;
+    min-width: 0;
 }
 
-#settings input[type='range']::-webkit-slider-runnable-track {
-    height: 16px;
-    border: none;
-    border-radius: var(--md-sys-shape-corner-full);
-    background: var(--md-sys-color-primary-container);
-}
-
-#settings input[type='range']::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 6px;
-    height: 28px;
-    margin-top: -6px;
-    border: none;
-    border-radius: var(--md-sys-shape-corner-full);
-    background: var(--md-sys-color-primary);
-}
-
-#settings input[type='range']::-moz-range-track {
-    height: 16px;
-    border: none;
-    border-radius: var(--md-sys-shape-corner-full);
-    background: var(--md-sys-color-primary-container);
-}
-
-#settings input[type='range']::-moz-range-thumb {
-    width: 6px;
-    height: 28px;
-    border: none;
-    border-radius: var(--md-sys-shape-corner-full);
-    background: var(--md-sys-color-primary);
-}
-
-#settings .slider output {
+.slider-row output {
     flex: 0 0 auto;
-    margin-right: 4px;
     font-size: 14px;
     font-weight: 500;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
-    color: var(--md-sys-color-on-surface);
 }
 
-#settings .slider .unit {
-    flex: 0 0 auto;
-    font-size: 12px;
-    color: var(--md-sys-color-on-surface-variant);
+/* Buttons */
+.actions {
+    padding: 0;
 }
 
-/* --------------------------------------------------------------------------
-   6. Components: text field / select / buttons
-   -------------------------------------------------------------------------- */
-#settings select,
-#settings input[type='text'] {
-    box-sizing: border-box;
+.actions m3e-button {
+    display: block;
     width: 100%;
-    min-height: 56px;
-    margin: 0;
-    padding: 8px 16px;
-    font-family: inherit;
-    font-size: 16px;
-    line-height: 24px;
-    color: var(--md-sys-color-on-surface);
-    background-color: var(--md-sys-color-surface-container-highest);
-    background-repeat: no-repeat;
-    border: none;
-    border-bottom: 1px solid var(--md-sys-color-outline);
-    border-radius: var(--md-sys-shape-corner-s) var(--md-sys-shape-corner-s) var(--md-sys-shape-corner-xs) var(--md-sys-shape-corner-xs);
-    outline: none;
-    transition: border-color var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
 }
 
-#settings select {
-    appearance: none;
-    -webkit-appearance: none;
-    padding-right: 44px;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2379747e'><path d='M7.4 8.6 12 13.2l4.6-4.6 1.4 1.4-6 6-6-6z'/></svg>");
-    background-position: right 12px center;
-    background-size: 22px 22px;
-}
-
-#settings select:focus,
-#settings input[type='text']:focus {
-    border-bottom-color: var(--md-sys-color-primary);
-    border-bottom-width: 2px;
-}
-
-#settings .actions {
-    display: flex;
-    flex-direction: column;
-    padding: 8px 14px 12px;
-}
-
-#settings .actions button + button {
-    margin-top: 8px;
-}
-
-#settings button {
-    appearance: none;
-    -webkit-appearance: none;
-    box-sizing: border-box;
-    width: 100%;
-    min-height: 40px;
-    margin: 0;
-    padding: 0 24px;
-    font-family: inherit;
-    font-size: 14px;
-    font-weight: 500;
-    letter-spacing: .0071428571em;
-    cursor: pointer;
-    border: none;
-    border-radius: var(--md-sys-shape-corner-full);
-    background: var(--md-sys-color-primary);
-    color: var(--md-sys-color-on-primary);
-    box-shadow: var(--md-sys-elevation-0);
-    transition: box-shadow var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
-}
-
-#settings button:hover {
-    box-shadow: var(--md-sys-elevation-1);
-}
-
-#settings button:active {
-    box-shadow: var(--md-sys-elevation-0);
-}
-
-#settings button.tonal {
-    background: var(--md-sys-color-secondary-container);
-    color: var(--md-sys-color-on-secondary-container);
-}
-
-/* --------------------------------------------------------------------------
-   7. Special sections
-   -------------------------------------------------------------------------- */
-#displayoptions {
-    display: flex;
-    flex-direction: row;
-    padding: 12px 10px;
-}
-
-.lefty #displayoptions {
-    flex-direction: row-reverse;
-}
-
-#displayoptions label {
+.row-actions m3e-button {
     flex: 1 1 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-sizing: border-box;
-    min-height: 40px;
-    margin: 0 4px;
-    padding: 0 12px;
-    font-size: 13px;
-    font-weight: 500;
-    text-align: center;
-    cursor: pointer;
-    color: var(--md-sys-color-primary);
-    background: var(--md-sys-color-secondary-container);
-    border-radius: var(--md-sys-shape-corner-full);
-}
-
-#leftylabel::before {
-    content: "❮ ";
-}
-
-.lefty #leftylabel {
-    text-align: right;
-}
-
-.lefty #leftylabel::before {
-    content: "";
-}
-
-.lefty #leftylabel::after {
-    content: " ❯";
-}
-
-#stats_section .stat {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 6px 14px 10px;
-    font-size: 14px;
-    color: var(--md-sys-color-on-surface-variant);
-}
-
-#stats_section output {
-    font-size: 20px;
-    font-weight: 500;
-    font-variant-numeric: tabular-nums;
-    color: var(--md-sys-color-primary);
-}
-
-#fps {
     width: auto;
 }
 
-#log_section {
-    padding-bottom: 14px;
-}
-
-#log_section > label {
-    display: block;
-    padding: 0 14px;
-    font-size: 12px;
-    letter-spacing: .03125em;
-    color: var(--md-sys-color-on-surface-variant);
-}
-
-#log {
-    max-width: 100%;
-    max-height: 14em;
-    margin: 6px 0 0;
-    padding: 12px;
-    box-sizing: border-box;
-    overflow: auto;
-    -webkit-overflow-scrolling: touch;
-    touch-action: pan-x pan-y;
-    user-select: text;
-    -webkit-touch-callout: default;
-    -webkit-user-select: text;
-    -khtml-user-select: text;
-    -moz-user-select: text;
-    -ms-user-select: text;
-    font-family: var(--md-sys-typescale-mono-font);
-    font-size: 11px;
-    line-height: 1.55;
-    white-space: pre-wrap;
-    word-break: break-word;
-    color: var(--md-sys-color-on-surface-variant);
-    background: var(--md-sys-color-surface-container);
-    border-radius: var(--md-sys-shape-corner-s);
-}
-
+/* --------------------------------------------------------------------------
+   Debug overlay and log
+   -------------------------------------------------------------------------- */
 #debug_overlay {
     --padding: 8px;
     position: absolute;
@@ -698,10 +368,9 @@ input[type='text'] {
     z-index: 1;
     pointer-events: none;
     padding: var(--padding);
-    border: 1px solid var(--md-sys-color-outline-variant);
-    border-radius: var(--md-sys-shape-corner-m);
-    box-shadow: var(--md-sys-elevation-2);
-    background: var(--md-sys-color-surface-container-high);
+    border: 1px solid var(--weylus-outline);
+    border-radius: 12px;
+    background: var(--weylus-surface);
     opacity: 92%;
     white-space: pre;
     font-size: small;
@@ -709,11 +378,36 @@ input[type='text'] {
 }
 
 #debug_overlay span.updated {
-    color: var(--md-sys-color-primary);
+    color: var(--weylus-accent);
+}
+
+.log {
+    max-width: 100%;
+    max-height: 14em;
+    margin: 0;
+    padding: 12px;
+    box-sizing: border-box;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+    user-select: text;
+    -webkit-touch-callout: default;
+    -webkit-user-select: text;
+    -khtml-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    font-family: var(--weylus-mono);
+    font-size: 11px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--weylus-fg-dim);
+    background: var(--weylus-bg);
+    border-radius: var(--shape-inner);
 }
 
 /* --------------------------------------------------------------------------
-   8. Access code page
+   Access code page
    -------------------------------------------------------------------------- */
 .container {
     width: 100%;
@@ -729,18 +423,13 @@ input[type='text'] {
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
+    gap: 18px;
     width: 24em;
     max-width: 92vw;
-    padding: 32px 24px;
-    font-family: var(--md-sys-typescale-font);
-    color: var(--md-sys-color-on-surface);
-    background: var(--md-sys-color-surface-container-low);
-    border-radius: var(--md-sys-shape-corner-3xl);
-    box-shadow: var(--md-sys-elevation-2);
-}
-
-.login-card > * + * {
-    margin-top: 18px;
+    padding: 24px;
+    color: var(--weylus-fg);
+    background: var(--weylus-surface);
+    border-radius: var(--shape-sheet);
 }
 
 .login-title {
@@ -749,75 +438,25 @@ input[type='text'] {
     font-weight: 400;
     line-height: 36px;
     text-align: center;
-    color: var(--md-sys-color-primary);
+    color: var(--weylus-accent);
 }
 
 .login-subtitle {
-    margin: -8px 0 0;
+    margin: 0;
     font-size: 14px;
     line-height: 20px;
     text-align: center;
-    color: var(--md-sys-color-on-surface-variant);
-}
-
-.login-card input[type='text'] {
-    box-sizing: border-box;
-    width: 100%;
-    min-height: 56px;
-    margin: 0;
-    padding: 8px 16px;
-    font-family: inherit;
-    font-size: 16px;
-    color: var(--md-sys-color-on-surface);
-    background: var(--md-sys-color-surface-container-highest);
-    border: none;
-    border-bottom: 1px solid var(--md-sys-color-outline);
-    border-radius: var(--md-sys-shape-corner-s) var(--md-sys-shape-corner-s) var(--md-sys-shape-corner-xs) var(--md-sys-shape-corner-xs);
-    outline: none;
-}
-
-.login-card input[type='text']:focus {
-    border-bottom-color: var(--md-sys-color-primary);
-    border-bottom-width: 2px;
-}
-
-.login-card button {
-    appearance: none;
-    -webkit-appearance: none;
-    min-height: 40px;
-    margin: 0;
-    padding: 0 24px;
-    font-family: inherit;
-    font-size: 14px;
-    font-weight: 500;
-    letter-spacing: .0071428571em;
-    cursor: pointer;
-    border: none;
-    border-radius: var(--md-sys-shape-corner-full);
-    background: var(--md-sys-color-primary);
-    color: var(--md-sys-color-on-primary);
+    color: var(--weylus-fg-dim);
 }
 
 /* --------------------------------------------------------------------------
-   9. State classes consumed by lib.js — keep these last and !important
+   State classes used by lib.js — keep these last and !important
    -------------------------------------------------------------------------- */
 .hide {
     display: none !important;
 }
 
-.vanish #handle,
 video.vanish,
 canvas.vanish {
     display: none !important;
-}
-
-#settings.hide,
-#settings.vanish {
-    transform: translateX(100%);
-    opacity: 40%;
-}
-
-#settings.hide.lefty,
-#settings.vanish.lefty {
-    transform: translateX(-100%);
 }

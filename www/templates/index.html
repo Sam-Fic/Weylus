@@ -6,10 +6,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
-    <meta name="theme-color" content="#f6f2f9" media="(prefers-color-scheme: light)">
-    <meta name="theme-color" content="#141218" media="(prefers-color-scheme: dark)">
     <title>Weylus</title>
     <link rel="stylesheet" href="style.css">
+    <script src="m3e.js"></script>
     <script src="lib.js"></script>
     <script>
         run("{{log_level}}");
@@ -17,113 +16,181 @@
 </head>
 
 <body>
-    <main id="main">
-        <video id="video" autoplay muted defaultMuted playsinline disablePictureInPicture></video>
-        <canvas id="canvas" class="vanish"></canvas>
-        <div id="debug_overlay" class="hide"></div>
-    </main>
-    <div id="settings">
-        <div id="handle">⠿</div>
-        <div id="settings_scroll">
-            <h2>Settings</h2>
+    <m3e-theme scheme="auto" color="#6750a4"></m3e-theme>
 
-            <section>
-                <h3>Capture</h3>
-                <div class="field">
-                    <label for="window">Window or screen</label>
-                    <select id="window"></select>
-                </div>
-                <div class="actions">
-                    <button id="refresh" class="tonal">Refresh List</button>
-                </div>
-            </section>
+    <m3e-drawer-container id="drawer" start-mode="over" end-mode="over" end>
 
-            <section>
-                <h3>Video</h3>
-                <label class="row"><input type="checkbox" id="enable_video" checked /> <span>Enable Video</span></label>
-                <label class="row"><input type="checkbox" id="energysaving" /> <span>Energy Saving
-                        <small>No video, black screen</small></span></label>
-                <label class="row"><input type="checkbox" id="stretch" checked /> <span>Stretch Video</span></label>
-                <label class="row {{#if (not capture_cursor_enabled)}}hide{{/if}}">
-                    <input type="checkbox" id="capture_cursor" />
-                    <span>Capture Cursor</span>
-                </label>
-                <label class="row"><input type="checkbox" id="aggressive_seeking" checked /> <span>Lower Latency
-                        <small>Possibly choppy</small></span></label>
-                <div class="field">
-                    <label>Max Video Resolution</label>
-                    <div class="slider">
-                        <input type="range" id="scale_video" min="0.1" max="2" step="0.01" value="1.8" /><output></output>
+        <!-- Settings side sheet. `slot` decides on which side it slides in,
+             lib.ts flips it between "end" and "start" for left handed users. -->
+        <aside id="settings" slot="end">
+            <div id="settings_header">
+                <h2>Settings</h2>
+                <m3e-icon-button id="drawer_close" variant="standard" aria-label="Close settings">
+                    <m3e-drawer-toggle for="settings"></m3e-drawer-toggle>
+                    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
+                        <path
+                            d="M6.4 19 5 17.6 10.6 12 5 6.4 6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4Z" />
+                    </svg>
+                </m3e-icon-button>
+            </div>
+            <div id="settings_scroll">
+
+                <m3e-card variant="filled">
+                    <h3 slot="header">Capture</h3>
+                    <div slot="content">
+                        <div class="field">
+                            <span class="field-label">Window or screen</span>
+                            <m3e-select id="window"></m3e-select>
+                        </div>
+                        <div class="actions">
+                            <m3e-button id="refresh" variant="tonal">Refresh List</m3e-button>
+                        </div>
                     </div>
-                </div>
-                <div class="field">
-                    <label>Frame Rate</label>
-                    <div class="slider">
-                        <input type="range" id="frame_rate" value="0" /><output>30</output><span class="unit">fps</span>
+                </m3e-card>
+
+                <m3e-card variant="filled">
+                    <h3 slot="header">Video</h3>
+                    <div slot="content">
+                        <div class="row">
+                            <div class="row-text"><span class="row-title">Enable Video</span></div>
+                            <m3e-switch id="enable_video" checked></m3e-switch>
+                        </div>
+                        <div class="row">
+                            <div class="row-text"><span class="row-title">Energy Saving</span><span
+                                    class="row-sub">No video, black screen</span></div>
+                            <m3e-switch id="energysaving"></m3e-switch>
+                        </div>
+                        <div class="row">
+                            <div class="row-text"><span class="row-title">Stretch Video</span></div>
+                            <m3e-switch id="stretch" checked></m3e-switch>
+                        </div>
+                        <div class="row {{#if (not capture_cursor_enabled)}}hide{{/if}}">
+                            <div class="row-text"><span class="row-title">Capture Cursor</span></div>
+                            <m3e-switch id="capture_cursor"></m3e-switch>
+                        </div>
+                        <div class="row">
+                            <div class="row-text"><span class="row-title">Lower Latency</span><span class="row-sub">
+                                    Possibly choppy</span></div>
+                            <m3e-switch id="aggressive_seeking" checked></m3e-switch>
+                        </div>
+                        <div class="field">
+                            <span class="field-label">Max Video Resolution</span>
+                            <div class="slider-row">
+                                <m3e-slider id="scale_video_slider" min="0.1" max="2" step="0.01">
+                                    <m3e-slider-thumb id="scale_video" value="1.8"></m3e-slider-thumb>
+                                </m3e-slider>
+                                <output id="scale_video_out"></output>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <span class="field-label">Frame Rate</span>
+                            <div class="slider-row">
+                                <m3e-slider id="frame_rate_slider" min="0" max="2430" step="1">
+                                    <m3e-slider-thumb id="frame_rate" value="0"></m3e-slider-thumb>
+                                </m3e-slider>
+                                <output id="frame_rate_out">30</output>
+                            </div>
+                        </div>
+                        <div class="actions">
+                            <m3e-button id="fullscreen" variant="tonal">Toggle Fullscreen</m3e-button>
+                        </div>
                     </div>
-                </div>
-                <div class="actions">
-                    <button id="fullscreen" class="tonal">Toggle Fullscreen</button>
-                </div>
-            </section>
+                </m3e-card>
 
-            <section>
-                <h3>Input</h3>
-                <label class="row"><input type="checkbox" id="enable_mouse" checked /> <span>Enable Mouse</span></label>
-                <label class="row"><input type="checkbox" id="enable_stylus" checked /> <span>Enable Stylus</span></label>
-                <label class="row"><input type="checkbox" id="enable_touch" checked /> <span>Enable Touch</span></label>
-                <label class="row {{#if (not uinput_enabled)}}hide{{/if}}">
-                    <input type="checkbox" id="uinput_support" checked />
-                    <span>Enable uinput</span>
-                </label>
-                <div class="field">
-                    <label>Min pressure to generate</label>
-                    <div class="slider">
-                        <input type="range" id="min_pressure" min="0" max="1" step="0.01" value="0" />
+                <m3e-card variant="filled">
+                    <h3 slot="header">Input</h3>
+                    <div slot="content">
+                        <div class="row">
+                            <div class="row-text"><span class="row-title">Enable Mouse</span></div>
+                            <m3e-switch id="enable_mouse" checked></m3e-switch>
+                        </div>
+                        <div class="row">
+                            <div class="row-text"><span class="row-title">Enable Stylus</span></div>
+                            <m3e-switch id="enable_stylus" checked></m3e-switch>
+                        </div>
+                        <div class="row">
+                            <div class="row-text"><span class="row-title">Enable Touch</span></div>
+                            <m3e-switch id="enable_touch" checked></m3e-switch>
+                        </div>
+                        <div class="row {{#if (not uinput_enabled)}}hide{{/if}}">
+                            <div class="row-text"><span class="row-title">Enable uinput</span></div>
+                            <m3e-switch id="uinput_support" checked></m3e-switch>
+                        </div>
+                        <div class="field">
+                            <span class="field-label">Min pressure to generate</span>
+                            <div class="slider-row">
+                                <m3e-slider id="min_pressure_slider" min="0" max="1" step="0.01">
+                                    <m3e-slider-thumb id="min_pressure" value="0"></m3e-slider-thumb>
+                                </m3e-slider>
+                            </div>
+                        </div>
+                        <div class="actions">
+                            <m3e-button id="custom_input_areas"
+                                variant="tonal" {{#if (not enable_custom_input_areas)}}class="hide" {{/if}}>Custom
+                                Input Area</m3e-button>
+                        </div>
+                        <div class="row {{#if (not enable_custom_input_areas)}}hide{{/if}}">
+                            <div class="row-text"><span class="row-title">Enable Custom Input Area</span></div>
+                            <m3e-switch id="enable_custom_input_areas"></m3e-switch>
+                        </div>
                     </div>
-                </div>
-                <div class="actions">
-                    <button id="custom_input_areas"
-                        class="tonal {{#if (not enable_custom_input_areas)}}hide{{/if}}">Custom Input Area</button>
-                </div>
-                <label class="row {{#if (not enable_custom_input_areas)}}hide{{/if}}">
-                    <input type="checkbox" id="enable_custom_input_areas" />
-                    <span>Enable Custom Input Area</span>
-                </label>
-            </section>
+                </m3e-card>
 
-            <section {{#if (not uinput_enabled)}}class="hide" {{/if}}>
-                <div class="field">
-                    <label for="client_name">Client Name
-                        <small>Optional, useful to distinguish multiple devices.</small>
-                    </label>
-                    <input type="text" id="client_name" placeholder="e.g. iPad" />
-                </div>
-            </section>
+                <m3e-card variant="filled" {{#if (not uinput_enabled)}}class="hide" {{/if}}>
+                    <h3 slot="header">Device</h3>
+                    <div slot="content">
+                        <m3e-form-field variant="outlined">
+                            <input type="text" id="client_name" placeholder="e.g. iPad">
+                            <span slot="label">Client Name</span>
+                            <span slot="hint">Optional, useful to distinguish multiple devices.</span>
+                        </m3e-form-field>
+                    </div>
+                </m3e-card>
 
-            <section id="stats_section">
-                <div class="stat">
-                    <span>FPS (receiving)</span><output id="fps">0</output>
-                </div>
-            </section>
+                <m3e-card variant="filled">
+                    <h3 slot="header">Statistics</h3>
+                    <div slot="content">
+                        <div class="row">
+                            <div class="row-text"><span class="row-title">FPS (receiving)</span></div>
+                            <output id="fps" class="row-value">0</output>
+                        </div>
+                        <div class="row">
+                            <div class="row-text"><span class="row-title">Debug Overlay</span></div>
+                            <m3e-switch id="enable_debug_overlay"></m3e-switch>
+                        </div>
+                    </div>
+                </m3e-card>
 
-            <section id="debug_section">
-                <label class="row"><input type="checkbox" id="enable_debug_overlay" /> <span>Debug
-                        Overlay</span></label>
-            </section>
+                <m3e-card variant="filled">
+                    <div slot="content" class="row-actions">
+                        <m3e-button id="lefty" variant="text" toggle>Swap sides</m3e-button>
+                        <m3e-button id="vanish" variant="text">Hide until reload</m3e-button>
+                    </div>
+                </m3e-card>
 
-            <section id="displayoptions">
-                <label id="leftylabel"><input type="checkbox" id="lefty" />Swap</label>
-                <label id="vanish">Hide until Reload</label>
-            </section>
+                <m3e-card variant="filled" id="log_section" class="hide">
+                    <h3 slot="header">Log</h3>
+                    <pre class="log" id="log" slot="content"></pre>
+                </m3e-card>
 
-            <section id="log_section" class="hide">
-                <label>Log
-                    <pre class="log" id="log"></pre>
-                </label>
-            </section>
-        </div>
-    </div>
+            </div>
+        </aside>
+
+        <main id="main">
+            <video id="video" autoplay muted defaultMuted playsinline disablePictureInPicture></video>
+            <canvas id="canvas" class="vanish"></canvas>
+            <div id="debug_overlay" class="hide"></div>
+
+            <!-- Opens the settings sheet. Hidden by CSS while the sheet is open. -->
+            <m3e-icon-button id="drawer_open" variant="tonal" aria-label="Open settings">
+                <m3e-drawer-toggle for="settings"></m3e-drawer-toggle>
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
+                    <path d="M3 6h18v2H3Zm0 5h18v2H3Zm0 5h18v2H3Z" />
+                </svg>
+            </m3e-icon-button>
+        </main>
+
+    </m3e-drawer-container>
 </body>
 
 </html>

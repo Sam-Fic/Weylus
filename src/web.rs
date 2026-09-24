@@ -36,6 +36,11 @@ pub const INDEX_HTML: &str = std::include_str!("../www/templates/index.html");
 pub const ACCESS_HTML: &str = std::include_str!("../www/static/access_code.html");
 pub const STYLE_CSS: &str = std::include_str!("../www/static/style.css");
 pub const LIB_JS: &str = std::include_str!("../www/static/lib.js");
+/// Self hosted bundle of the m3e (Material 3 Expressive) web components.
+///
+/// It has to be vendored instead of loaded from a CDN because tablets are
+/// usually not connected to the internet while using Weylus.
+pub const M3E_JS: &str = std::include_str!("../www/static/m3e.js");
 
 #[derive(Serialize)]
 struct IndexTemplateContext {
@@ -213,6 +218,8 @@ async fn serve(
         )
         .await
         .map(|r| r.boxed())),
+        "/m3e.js" => Ok(response_from_str(M3E_JS, "text/javascript; charset=utf-8")
+            .map(|r| r.boxed())),
         _ => Ok(response_not_found().map(|r| r.boxed())),
     }
 }

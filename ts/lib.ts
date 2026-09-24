@@ -2,6 +2,39 @@ interface Window {
     ManagedMediaSource: any;
 }
 
+/* Minimal typings for the m3e web components used by the settings sheet. */
+interface M3eSwitch extends HTMLElement {
+    checked: boolean;
+    disabled: boolean;
+}
+
+interface M3eToggleButton extends HTMLElement {
+    selected: boolean;
+}
+
+interface M3eSlider extends HTMLElement {
+    min: number;
+    max: number;
+    step: number;
+}
+
+interface M3eSliderThumb extends HTMLElement {
+    value: number;
+}
+
+interface M3eSelect extends HTMLElement {
+    value: string;
+}
+
+interface M3eDrawerContainer extends HTMLElement {
+    start: boolean;
+    end: boolean;
+}
+
+function el<T>(id: string): T {
+    return document.getElementById(id) as unknown as T;
+}
+
 enum LogLevel {
     ERROR = 0,
     WARN,
@@ -109,90 +142,105 @@ class CustomInputAreas {
 
 class Settings {
     webSocket: WebSocket;
-    checks: Map<string, HTMLInputElement>;
-    capturable_select: HTMLSelectElement;
-    frame_rate_input: HTMLInputElement;
+    switches: Map<string, M3eSwitch>;
+    toggles: Map<string, M3eToggleButton>;
+    capturable_select: M3eSelect;
+    capturable_names: string[];
+    frame_rate: M3eSliderThumb;
+    frame_rate_slider: M3eSlider;
     frame_rate_output: HTMLOutputElement;
-    scale_video_input: HTMLInputElement;
+    scale_video: M3eSliderThumb;
     scale_video_output: HTMLOutputElement;
-    range_min_pressure: HTMLInputElement;
-    check_aggressive_seek: HTMLInputElement;
+    min_pressure: M3eSliderThumb;
+    check_aggressive_seek: M3eSwitch;
     client_name_input: HTMLInputElement;
+    drawer: M3eDrawerContainer;
     visible: boolean;
     custom_input_areas: CustomInputAreas;
     settings: HTMLElement;
 
     constructor(webSocket: WebSocket) {
         this.webSocket = webSocket;
-        this.checks = new Map<string, HTMLInputElement>();
-        this.capturable_select = document.getElementById("window") as HTMLSelectElement;
-        this.frame_rate_input = document.getElementById("frame_rate") as HTMLInputElement;
-        this.frame_rate_input.min = frame_rate_scale_inv(0).toString();
-        this.frame_rate_input.max = frame_rate_scale_inv(120).toString();
-        this.frame_rate_output = this.frame_rate_input.nextElementSibling as HTMLOutputElement;
-        this.scale_video_input = document.getElementById("scale_video") as HTMLInputElement;
-        this.scale_video_output = this.scale_video_input.nextElementSibling as HTMLOutputElement;
-        this.range_min_pressure = document.getElementById("min_pressure") as HTMLInputElement;
-        this.client_name_input = document.getElementById("client_name") as HTMLInputElement;
-        this.frame_rate_input.oninput = () => {
-            this.frame_rate_output.value = Math.round(frame_rate_scale(this.frame_rate_input.valueAsNumber)).toString();
-        }
-        this.scale_video_input.oninput = () => {
-            let [w, h] = calc_max_video_resolution(this.scale_video_input.valueAsNumber)
-            this.scale_video_output.value = w + "x" + h
-        }
+        this.switches = new Map<string, M3eSwitch>();
+        this.toggles = new Map<string, M3eToggleButton>();
+        this.capturable_names = [];
+        this.capturable_select = el<M3eSelect>("window");
+        this.settings = document.getElementById("settings");
+
+        this.scale_video = el<M3eSliderThumb>("scale_video");
+        this.scale_video_output = el<HTMLOutputElement>("scale_video_out");
+        this.frame_rate = el<M3eSliderThumb>("frame_rate");
+        this.frame_rate_slider = el<M3eSlider>("frame_rate_slider");
+        this.frame_rate_output = el<HTMLOutputElement>("frame_rate_out");
+        this.min_pressure = el<M3eSliderThumb>("min_pressure");
+        this.client_name_input = el<HTMLInputElement>("client_name");
+
+        this.frame_rate_slider.min = frame_rate_scale_inv(0);
+        this.frame_rate_slider.max = frame_rate_scale_inv(120);
+
+        let upd_outputs = () => {
+            let [w, h] = calc_max_video_resolution(this.scale_video.value);
+            this.scale_video_output.value = w + "x" + h;
+            this.frame_rate_output.value =
+                Math.round(frame_rate_scale(this.frame_rate.value)).toString();
+        };
+        this.scale_video.addEventListener("input", upd_outputs);
+        this.frame_rate.addEventListener("input", upd_outputs);
+        upd_outputs();
+
         this.visible = true;
 
         // Settings UI
-        this.settings = document.getElementById("settings");
         this.settings.onclick = (e) => e.stopPropagation();
-        let handle = document.getElementById("handle");
+        this.drawer = el<M3eDrawerContainer>("drawer");
+        this.drawer.addEventListener("change", () => this.sync_visible());
 
-        // Settings elements
-        this.settings.querySelectorAll("input[type=checkbox]").forEach(
-            (elem, _key, _parent) => this.checks.set(elem.id, elem as HTMLInputElement)
+        // m3e controls
+        this.settings.querySelectorAll("m3e-switch").forEach(
+            (elem) => this.switches.set(elem.id, elem as unknown as M3eSwitch)
+        );
+        this.settings.querySelectorAll("m3e-button[toggle]").forEach(
+            (elem) => this.toggles.set(elem.id, elem as unknown as M3eToggleButton)
         );
 
         this.load_settings();
+        this.sync_visible();
 
         // event handling
 
         // client only
-        handle.onclick = () => { this.toggle() };
-        this.checks.get("lefty").onchange = (e) => {
-            if ((e.target as HTMLInputElement).checked)
-                this.settings.classList.add("lefty");
-            else
-                this.settings.classList.remove("lefty");
+        this.toggles.get("lefty").addEventListener("change", () => {
+            this.apply_side();
             this.save_settings();
+        });
+
+        el<HTMLElement>("vanish").onclick = () => {
+            document.body.classList.add("vanish");
+            this.close();
         }
 
-        document.getElementById("vanish").onclick = () => {
-            this.settings.classList.add("vanish");
-        }
-
-        this.checks.get("stretch").onchange = () => {
+        this.switches.get("stretch").addEventListener("change", () => {
             stretch_video();
             this.save_settings();
-        };
+        });
 
-        this.checks.get("enable_debug_overlay").onchange = (e) => {
-            let enabled = (e.target as HTMLInputElement).checked;
+        this.switches.get("enable_debug_overlay").addEventListener("change", (e) => {
+            let enabled = (e.target as M3eSwitch).checked;
             if (enabled) {
                 debug_overlay.classList.remove("hide");
             } else {
                 debug_overlay.classList.add("hide");
             }
             this.save_settings();
-        };
+        });
 
-        this.check_aggressive_seek = this.checks.get("aggressive_seeking");
-        this.check_aggressive_seek.onchange = () => {
+        this.check_aggressive_seek = this.switches.get("aggressive_seeking");
+        this.check_aggressive_seek.addEventListener("change", () => {
             this.save_settings();
-        };
+        });
 
-        this.checks.get("enable_video").onchange = (e) => {
-            let enabled = (e.target as HTMLInputElement).checked;
+        this.switches.get("enable_video").addEventListener("change", (e) => {
+            let enabled = (e.target as M3eSwitch).checked;
             document.getElementById("video").classList.toggle("vanish", !enabled);
             document.getElementById("canvas").classList.toggle("vanish", enabled);
             this.save_settings();
@@ -201,41 +249,41 @@ class Settings {
             } else {
                 this.webSocket.send('"PauseVideo"');
             }
-        }
+        });
 
         let upd_pointer = () => {
             this.save_settings();
             new PointerHandler(this.webSocket);
         }
-        this.checks.get("enable_mouse").onchange = upd_pointer;
-        this.checks.get("enable_stylus").onchange = upd_pointer;
-        this.checks.get("enable_touch").onchange = upd_pointer;
+        this.switches.get("enable_mouse").addEventListener("change", upd_pointer);
+        this.switches.get("enable_stylus").addEventListener("change", upd_pointer);
+        this.switches.get("enable_touch").addEventListener("change", upd_pointer);
 
-        this.checks.get("energysaving").onchange = (e) => {
+        this.switches.get("energysaving").addEventListener("change", (e) => {
             this.save_settings();
-            this.toggle_energysaving((e.target as HTMLInputElement).checked);
-        };
+            this.toggle_energysaving((e.target as M3eSwitch).checked);
+        });
 
-        this.checks.get("enable_custom_input_areas").onchange = () => {
+        this.switches.get("enable_custom_input_areas").addEventListener("change", () => {
             this.save_settings();
-        };
+        });
 
-        this.frame_rate_input.onchange = () => this.save_settings();
-        this.range_min_pressure.onchange = () => this.save_settings();
+        this.frame_rate.addEventListener("change", () => this.save_settings());
+        this.min_pressure.addEventListener("change", () => this.save_settings());
 
         // server
         let upd_server_config = () => { this.save_settings(); this.send_server_config() };
-        this.checks.get("uinput_support").onchange = upd_server_config;
-        this.checks.get("capture_cursor").onchange = upd_server_config;
-        this.scale_video_input.onchange = upd_server_config;
+        this.switches.get("uinput_support").addEventListener("change", upd_server_config);
+        this.switches.get("capture_cursor").addEventListener("change", upd_server_config);
+        this.scale_video.addEventListener("change", upd_server_config);
         this.client_name_input.onchange = upd_server_config;
-        this.frame_rate_input.onchange = upd_server_config;
+        this.frame_rate.addEventListener("change", upd_server_config);
 
-        document.getElementById("refresh").onclick = () => this.webSocket.send('"GetCapturableList"');
-        document.getElementById("custom_input_areas").onclick = () => {
+        el<HTMLElement>("refresh").onclick = () => this.webSocket.send('"GetCapturableList"');
+        el<HTMLElement>("custom_input_areas").onclick = () => {
             this.webSocket.send('"ChooseCustomInputAreas"');
         };
-        this.capturable_select.onchange = () => this.send_server_config();
+        this.capturable_select.addEventListener("change", () => this.send_server_config());
     }
 
     send_server_config() {
@@ -244,11 +292,11 @@ class Settings {
         for (const key of [
             "uinput_support",
             "capture_cursor"])
-            config[key] = this.checks.get(key).checked;
-        let [w, h] = calc_max_video_resolution(this.scale_video_input.valueAsNumber);
+            config[key] = this.switches.get(key).checked;
+        let [w, h] = calc_max_video_resolution(this.scale_video.value);
         config["max_width"] = w;
         config["max_height"] = h;
-        config["frame_rate"] = frame_rate_scale(this.frame_rate_input.valueAsNumber);
+        config["frame_rate"] = frame_rate_scale(this.frame_rate.value);
         if (this.client_name_input.value)
             config["client_name"] = this.client_name_input.value;
         this.webSocket.send(JSON.stringify({ "Config": config }));
@@ -256,11 +304,13 @@ class Settings {
 
     save_settings() {
         let settings = Object(null);
-        for (const [key, elem] of this.checks.entries())
+        for (const [key, elem] of this.switches.entries())
             settings[key] = elem.checked;
-        settings["frame_rate"] = frame_rate_scale(this.frame_rate_input.valueAsNumber).toString();
-        settings["scale_video"] = this.scale_video_input.value;
-        settings["min_pressure"] = this.range_min_pressure.value;
+        for (const [key, elem] of this.toggles.entries())
+            settings[key] = elem.selected;
+        settings["frame_rate"] = frame_rate_scale(this.frame_rate.value).toString();
+        settings["scale_video"] = this.scale_video.value;
+        settings["min_pressure"] = this.min_pressure.value;
         settings["custom_input_areas"] = this.custom_input_areas;
         settings["client_name"] = this.client_name_input.value;
         localStorage.setItem("settings", JSON.stringify(settings));
@@ -269,60 +319,62 @@ class Settings {
     load_settings() {
         let settings_string = localStorage.getItem("settings");
         if (settings_string === null) {
-            this.frame_rate_input.value = frame_rate_scale_inv(30).toString();
+            this.frame_rate.value = frame_rate_scale_inv(30);
             this.frame_rate_output.value = (30).toString();
-            let [w, h] = calc_max_video_resolution(this.scale_video_input.valueAsNumber)
+            let [w, h] = calc_max_video_resolution(this.scale_video.value)
             this.scale_video_output.value = w + "x" + h;
             return;
         }
         try {
             let settings = JSON.parse(settings_string);
-            for (const [key, elem] of this.checks.entries()) {
+            for (const [key, elem] of this.switches.entries()) {
                 if (typeof settings[key] === "boolean")
                     elem.checked = settings[key];
             }
+            for (const [key, elem] of this.toggles.entries()) {
+                if (typeof settings[key] === "boolean")
+                    elem.selected = settings[key];
+            }
             let upd_limit = settings["frame_rate"];
             if (upd_limit)
-                this.frame_rate_input.value = frame_rate_scale_inv(upd_limit).toString();
+                this.frame_rate.value = frame_rate_scale_inv(upd_limit);
             else
-                this.frame_rate_input.value = frame_rate_scale_inv(30).toString();
-            this.frame_rate_output.value = Math.round(frame_rate_scale(this.frame_rate_input.valueAsNumber)).toString();
+                this.frame_rate.value = frame_rate_scale_inv(30);
+            this.frame_rate_output.value = Math.round(frame_rate_scale(this.frame_rate.value)).toString();
 
             let scale_video = settings["scale_video"];
             if (scale_video)
-                this.scale_video_input.value = scale_video;
-            let [w, h] = calc_max_video_resolution(this.scale_video_input.valueAsNumber);
+                this.scale_video.value = scale_video;
+            let [w, h] = calc_max_video_resolution(this.scale_video.value);
             this.scale_video_output.value = w + "x" + h;
 
             let min_pressure = settings["min_pressure"];
             if (min_pressure)
-                this.range_min_pressure.value = min_pressure;
+                this.min_pressure.value = min_pressure;
 
             this.custom_input_areas = settings["custom_input_areas"];
 
-            if (this.checks.get("lefty").checked) {
-                this.settings.classList.add("lefty");
-            }
+            this.apply_side();
 
-            if (!this.checks.get("enable_video").checked || this.checks.get("energysaving").checked) {
-                this.checks.get("enable_video").checked = false;
-                if (this.checks.get("energysaving").checked)
-                    this.checks.get("enable_video").disabled = true;
+            if (!this.switches.get("enable_video").checked || this.switches.get("energysaving").checked) {
+                this.switches.get("enable_video").checked = false;
+                if (this.switches.get("energysaving").checked)
+                    this.switches.get("enable_video").disabled = true;
                 document.getElementById("video").classList.add("vanish");
                 document.getElementById("canvas").classList.remove("vanish");
             }
 
-            if (this.checks.get("energysaving").checked) {
+            if (this.switches.get("energysaving").checked) {
                 this.toggle_energysaving(true);
             }
 
-            if (this.checks.get("enable_debug_overlay").checked) {
+            if (this.switches.get("enable_debug_overlay").checked) {
                 debug_overlay.classList.remove("hide");
             }
 
 
-            if (document.getElementById("custom_input_areas").classList.contains("hide")) {
-                this.checks.get("enable_custom_input_areas").checked = false;
+            if (el<HTMLElement>("custom_input_areas").classList.contains("hide")) {
+                this.switches.get("enable_custom_input_areas").checked = false;
             }
 
             let client_name = settings["client_name"];
@@ -336,35 +388,82 @@ class Settings {
     }
 
     stretched_video() {
-        return this.checks.get("stretch").checked
+        return this.switches.get("stretch").checked
     }
 
     pointer_types() {
         let ptrs = [];
-        if (this.checks.get("enable_mouse").checked)
+        if (this.switches.get("enable_mouse").checked)
             ptrs.push("mouse");
-        if (this.checks.get("enable_stylus").checked)
+        if (this.switches.get("enable_stylus").checked)
             ptrs.push("pen");
-        if (this.checks.get("enable_touch").checked)
+        if (this.switches.get("enable_touch").checked)
             ptrs.push("touch");
         return ptrs;
     }
 
+    /* ---------------------------------------------------------------------
+       Side sheet handling.
+
+       The sheet lives in <m3e-drawer-container>; its side is decided by the
+       `slot` of the <aside> ("start" or "end") and its open state by the
+       `start` / `end` properties of the container. Both are reflected to
+       attributes, so CSS can react to them as well.
+       --------------------------------------------------------------------- */
+
+    is_open(): boolean {
+        return this.drawer.start || this.drawer.end;
+    }
+
+    sync_visible() {
+        this.visible = this.is_open();
+    }
+
+    left_handed(): boolean {
+        return this.toggles.get("lefty").selected;
+    }
+
+    /** Move the sheet to the other side, keeping its open state. */
+    apply_side() {
+        let lefty = this.left_handed();
+        let open = this.is_open();
+        document.body.classList.toggle("lefty", lefty);
+        this.drawer.start = false;
+        this.drawer.end = false;
+        this.settings.setAttribute("slot", lefty ? "start" : "end");
+        if (open) {
+            if (lefty) this.drawer.start = true;
+            else this.drawer.end = true;
+        }
+        this.sync_visible();
+    }
+
     toggle() {
-        this.settings.classList.toggle("hide");
-        this.visible = !this.visible;
+        if (this.left_handed()) this.drawer.start = !this.drawer.start;
+        else this.drawer.end = !this.drawer.end;
+        this.sync_visible();
+    }
+
+    close() {
+        this.drawer.start = false;
+        this.drawer.end = false;
+        this.sync_visible();
     }
 
     onCapturableList(window_names: string[]) {
+        // m3e-select does not expose the selected option, so the previously
+        // selected name is looked up in the list captured last time.
+        let current_value = this.capturable_select.value;
         let current_selection = undefined;
-        if (this.capturable_select.selectedOptions[0])
-            current_selection = this.capturable_select.selectedOptions[0].textContent;
+        if (current_value !== undefined && current_value !== null && current_value !== "")
+            current_selection = this.capturable_names[Number(current_value)];
         let new_index: number;
-        this.capturable_select.innerText = "";
+        this.capturable_names = window_names;
+        this.capturable_select.textContent = "";
         window_names.forEach((name, i) => {
-            let option = document.createElement("option");
-            option.value = String(i);
-            option.innerText = name;
+            let option = document.createElement("m3e-option");
+            option.setAttribute("value", String(i));
+            option.textContent = name;
             this.capturable_select.appendChild(option);
             if (name === current_selection)
                 new_index = i;
@@ -385,17 +484,17 @@ class Settings {
         }
 
         if (energysaving) {
-            this.checks.get("enable_video").checked = false;
-            this.checks.get("enable_video").disabled = true;
-            this.checks.get("enable_video").dispatchEvent(new Event("change"));
+            this.switches.get("enable_video").checked = false;
+            this.switches.get("enable_video").disabled = true;
+            this.switches.get("enable_video").dispatchEvent(new Event("change"));
         } else
-            this.checks.get("enable_video").disabled = false;
+            this.switches.get("enable_video").disabled = false;
         if (settings)
             new PointerHandler(this.webSocket);
     }
 
     video_enabled(): boolean {
-        return this.checks.get("enable_video").checked;
+        return this.switches.get("enable_video").checked;
     }
 }
 
@@ -442,7 +541,7 @@ class PEvent {
         let y_offset = 0;
         let x_scale = 1;
         let y_scale = 1;
-        if (settings.checks.get("enable_custom_input_areas").checked) {
+        if (settings.switches.get("enable_custom_input_areas").checked) {
             let custom_input_area: Rect = null;
             if (event.pointerType == "mouse") {
                 custom_input_area = settings.custom_input_areas.mouse;
@@ -462,7 +561,7 @@ class PEvent {
         this.y = (event.clientY - targetRect.top) / targetRect.height * y_scale + y_offset;
         // this.movement_x = event.movementX ? event.movementX : 0;
         // this.movement_y = event.movementY ? event.movementY : 0;
-        this.pressure = Math.max(event.pressure, settings.range_min_pressure.valueAsNumber);
+        this.pressure = Math.max(event.pressure, settings.min_pressure.value);
         this.tilt_x = event.tiltX;
         this.tilt_y = event.tiltY;
         this.width = event.width / diag_len;
@@ -706,7 +805,7 @@ class PointerHandler {
         video.onpointerover = (e) => this.onEvent(e, "pointerover");
 
         let painter: Painter;
-        if (!settings.checks.get("energysaving").checked)
+        if (!settings.switches.get("energysaving").checked)
             painter = new Painter(canvas as HTMLCanvasElement);
 
         if (painter && painter.initialized) {
@@ -743,7 +842,7 @@ class PointerHandler {
     }
 
     onEvent(event: PointerEvent, event_type: string) {
-        if (settings.checks.get("enable_debug_overlay").checked) {
+        if (settings.switches.get("enable_debug_overlay").checked) {
             let props = [
                 "altKey",
                 "altitudeAngle",
@@ -854,7 +953,6 @@ class KeyboardHandler {
         this.webSocket = webSocket;
 
         let d = document;
-        let s = document.getElementById("settings")
 
         // Consume all KeyboardEvents, except the settings menu is open.
         // this avoids making the main/video/canvas element focusable by using
@@ -862,7 +960,7 @@ class KeyboardHandler {
         // hovering.
 
         function settings_hidden() {
-            return s.classList.contains("hide") || s.classList.contains("vanish");
+            return !settings.is_open();
         }
 
         d.onkeydown = (e) => {
@@ -970,7 +1068,7 @@ function handle_messages(
                     onConfigError(msg["ConfigError"]);
                 } else if ("CustomInputAreas" in msg) {
                     settings.custom_input_areas = msg["CustomInputAreas"];
-                    settings.checks.get("enable_custom_input_areas").checked = true;
+                    settings.switches.get("enable_custom_input_areas").checked = true;
                     settings.save_settings();
                 }
             }
@@ -1078,7 +1176,7 @@ function init() {
         stretch_video();
         canvas.width = window.innerWidth * window.devicePixelRatio;
         canvas.height = window.innerHeight * window.devicePixelRatio;
-        let [w, h] = calc_max_video_resolution(settings.scale_video_input.valueAsNumber);
+        let [w, h] = calc_max_video_resolution(settings.scale_video.value);
         settings.scale_video_output.value = w + "x" + h;
         settings.send_server_config();
     }

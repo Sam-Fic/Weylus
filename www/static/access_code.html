@@ -6,22 +6,31 @@
 	<meta name="apple-mobile-web-app-capable" content="yes" />
 	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 	<meta name="mobile-web-app-capable" content="yes">
-	<meta name="theme-color" content="#f6f2f9" media="(prefers-color-scheme: light)">
-	<meta name="theme-color" content="#141218" media="(prefers-color-scheme: dark)">
 	<title>Weylus</title>
 	<link rel="stylesheet" href="style.css">
+	<script src="m3e.js"></script>
 </head>
 
 <body>
+	<m3e-theme scheme="auto" color="#6750a4"></m3e-theme>
 	<div class="container">
-		<form class="login-card" action="/">
+		<form id="login_form" class="login-card" action="/">
 			<h1 class="login-title">Weylus</h1>
 			<p class="login-subtitle">Enter the access code to continue.</p>
-			<input type="text" id="access_code" name="access_code" placeholder="Access code" autocomplete="off"
-				autocapitalize="off" autocorrect="off" spellcheck="false" required>
-			<button type="submit">Login</button>
+			<m3e-form-field variant="outlined">
+				<input type="text" id="access_code" name="access_code" placeholder="Access code" autocomplete="off"
+					autocapitalize="off" autocorrect="off" spellcheck="false" required>
+				<span slot="label">Access code</span>
+			</m3e-form-field>
+			<m3e-button id="login" variant="filled">Login</m3e-button>
 		</form>
 	</div>
+	<script>
+		// m3e-button does not submit forms on its own, do it explicitly.
+		document.getElementById("login").addEventListener("click", function () {
+			document.getElementById("login_form").submit();
+		});
+	</script>
 </body>
 
 </html>

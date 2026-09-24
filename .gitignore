@@ -10,6 +10,8 @@ c_helper/Cargo.lock
 *.js
 *.js.map
 *.tar.gz
+# Vendored third party bundle, embedded into the binary via include_str!.
+!www/static/m3e.js
 
 # Local backups and tooling
 /src_backup/

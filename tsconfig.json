@@ -3,8 +3,10 @@
     "target": "es2020",
     "lib": ["es2020", "dom", "es6"],
     "module": "commonjs",
+    "rootDir": "ts",
     "outDir": "www/static",
-    "sourceMap": false
+    "sourceMap": false,
+    "strict": false
   },
   "include": [
     "ts/**/*.ts"
