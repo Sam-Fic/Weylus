@@ -55,9 +55,17 @@ fn build_window(
     let header = adw::HeaderBar::new();
     header.set_title_widget(Some(&window_title));
 
+    let button_image =
+        gtk4::Image::from_icon_name("media-playback-start-symbolic");
+    let button_label = gtk4::Label::new(Some("Start"));
+    let button_inner = gtk4::Box::builder()
+        .orientation(gtk4::Orientation::Horizontal)
+        .spacing(8)
+        .build();
+    button_inner.append(&button_image);
+    button_inner.append(&button_label);
     let button_toggle = gtk4::Button::builder()
-        .icon_name("media-playback-start-symbolic")
-        .label("Start")
+        .child(&button_inner)
         .build();
     button_toggle.add_css_class("suggested-action");
     header.pack_start(&button_toggle);
@@ -265,6 +273,8 @@ fn build_window(
         let is_running = is_running.clone();
         let config = config.clone();
         let button = button_toggle.clone();
+        let button_image = button_image.clone();
+        let button_label = button_label.clone();
         let window_title = window_title.clone();
         let status_page = status_page.clone();
         let qr_box = qr_box.clone();
@@ -284,8 +294,8 @@ fn build_window(
             if is_running.get() {
                 weylus.borrow_mut().stop();
                 is_running.set(false);
-                button.set_label("Start");
-                button.set_icon_name("media-playback-start-symbolic");
+                button_label.set_text("Start");
+                button_image.set_icon_name(Some("media-playback-start-symbolic"));
                 button.add_css_class("suggested-action");
                 window_title.set_subtitle("Not running");
                 status_page.set_visible(true);
@@ -336,8 +346,8 @@ fn build_window(
 
             write_config(&cfg);
             is_running.set(true);
-            button.set_label("Stop");
-            button.set_icon_name("media-playback-stop-symbolic");
+            button_label.set_text("Stop");
+            button_image.set_icon_name(Some("media-playback-stop-symbolic"));
             button.remove_css_class("suggested-action");
             window_title.set_subtitle(&format!("Listening on port {}", cfg.web_port));
 

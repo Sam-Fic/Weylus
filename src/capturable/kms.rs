@@ -446,7 +446,9 @@ impl KmsFrameSource {
             if info.name().to_bytes() != b"type" {
                 continue;
             }
-            let Some(value) = info.value_type().convert_value(*raw_value).as_enum() else {
+            let value_type = info.value_type();
+            let prop_value = value_type.convert_value(*raw_value);
+            let Some(value) = prop_value.as_enum() else {
                 continue;
             };
             let plane_type = match value.name().to_bytes() {
@@ -467,7 +469,8 @@ impl KmsFrameSource {
             if info.name().to_bytes() != b"zpos" {
                 continue;
             }
-            let value = info.value_type().convert_value(*raw_value);
+            let value_type = info.value_type();
+            let value = value_type.convert_value(*raw_value);
             return Ok(
                 value
                     .as_signed_range()
