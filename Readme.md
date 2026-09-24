@@ -34,7 +34,7 @@ lack of testing:
 * [new frontend: click-to-reconnect + accurate coordinates on HiDPI pad](https://github.com/H-M-H/Weylus/pull/290)
 * [feat: virtual keyboard](https://github.com/H-M-H/Weylus/pull/291)
 
-### Changes in this fork (by Sam-Fic)
+### Changes in this fork
 
 This fork builds on the community edition and additionally:
 
