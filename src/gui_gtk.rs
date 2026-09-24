@@ -137,6 +137,21 @@ fn build_window(
     group_hw.add(&row_nvenc);
     left.append(&group_hw);
 
+    // Make the nested log area's background transparent so it blends with the
+    // expander instead of showing a separate card-like box.
+    let css_provider = gtk4::CssProvider::new();
+    css_provider.load_from_data(
+        ".log-transparent, .log-transparent text, .log-transparent > * { \
+             background-color: transparent; background-image: none; }",
+    );
+    if let Some(display) = gtk4::gdk::Display::default() {
+        gtk4::style_context_add_provider_for_display(
+            &display,
+            &css_provider,
+            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
+    }
+
     let group_log = adw::PreferencesGroup::builder().title("Log").build();
     let log_expander = adw::ExpanderRow::builder().title("Log").build();
     let log_view = gtk4::TextView::builder()
@@ -144,10 +159,16 @@ fn build_window(
         .monospace(true)
         .wrap_mode(gtk4::WrapMode::WordChar)
         .build();
+    log_view.add_css_class("log-transparent");
+    log_view.set_left_margin(8);
+    log_view.set_right_margin(8);
+    log_view.set_top_margin(8);
+    log_view.set_bottom_margin(8);
     let log_scroll = gtk4::ScrolledWindow::builder()
         .min_content_height(180)
         .child(&log_view)
         .build();
+    log_scroll.add_css_class("log-transparent");
     log_expander.add_row(&log_scroll);
     group_log.add(&log_expander);
     left.append(&group_log);
