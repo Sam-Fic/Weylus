@@ -1,0 +1,88 @@
+name: Build DEB & Release
+
+on:
+  # 推送 v* 标签时自动构建并发布
+  push:
+    tags:
+      - 'v*'
+  # 也可以在 Actions 页面手动触发（用于发布当前 Cargo.toml 版本）
+  workflow_dispatch:
+
+permissions:
+  contents: write # softprops/action-gh-release 需要写权限来创建 release
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install build dependencies
+        run: |
+          sudo apt update
+          sudo apt remove -y libc++-dev libc++-13-dev libunwind-13-dev || true
+          sudo apt upgrade -y
+          sudo apt install -y \
+            nasm libunwind-dev libx11-dev libwayland-dev wayland-protocols \
+            libdecor-0-dev libegl1-mesa-dev libgles2-mesa-dev libxext-dev \
+            libxft-dev libxinerama-dev libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev libxcursor-dev libxrender-dev \
+            libxfixes-dev libxtst-dev libxrandr-dev libxcomposite-dev \
+            libxi-dev libxv-dev autoconf libtool-bin nvidia-cuda-dev \
+            pkg-config libdrm-dev libpango1.0-dev libdbus-1-dev \
+            libavdevice-dev libavfilter-dev libx264-dev libxkbcommon-x11-0 \
+            libxkbcommon-dev libxcb-dri3-0 libxcb-dri3-dev libx11-xcb-dev
+
+      - name: Install TypeScript and cargo-deb
+        run: |
+          sudo npm install -g typescript@5.5.4
+          cargo install cargo-deb
+
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+            TAG="v${VERSION}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Build .deb
+        env:
+          RUSTFLAGS: "-A dead_code -A unused_imports"
+        run: |
+          cargo deb --release --features "va-static,fltk/use-wayland"
+
+      - name: Locate .deb
+        id: deb
+        shell: bash
+        run: |
+          DEB=$(find target/debian -maxdepth 1 -name '*.deb' -print -quit)
+          test -n "$DEB" || { echo "No .deb produced" >&2; exit 1; }
+          ls -lh target/debian/
+          echo "path=${DEB}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: weylus-deb
+          path: ${{ steps.deb.outputs.path }}
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: Weylus ${{ steps.release.outputs.tag }}
+          files: ${{ steps.deb.outputs.path }}
+          generate_release_notes: true
+          prerelease: false
