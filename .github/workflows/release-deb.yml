@@ -25,11 +25,12 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt update
-          sudo apt remove -y libc++-dev libc++-13-dev libunwind-13-dev || true
-          sudo apt upgrade -y
-          sudo apt install -y \
+          sudo apt-get update
+          sudo apt-get remove -y libc++-dev libc++-13-dev libunwind-13-dev || true
+          sudo apt-get install -y --no-install-recommends \
             nasm libunwind-dev libx11-dev libwayland-dev wayland-protocols \
             libdecor-0-dev libegl1-mesa-dev libgles2-mesa-dev libxext-dev \
             libxft-dev libxinerama-dev libgstreamer1.0-dev \
