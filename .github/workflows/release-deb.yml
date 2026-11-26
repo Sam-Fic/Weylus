@@ -62,8 +62,8 @@ jobs:
         env:
           RUSTFLAGS: "-A dead_code -A unused_imports"
         run: |
-          # 新版 cargo-deb 用 `--` 分隔透传给 cargo build 的参数
-          cargo deb -- --release --features "va-static,fltk/use-wayland"
+          # 新版 cargo-deb 用 `--` 分隔透传给 cargo build 的参数；它自己已带 --release
+          cargo deb -- --features "va-static,fltk/use-wayland"
 
       - name: Locate .deb
         id: deb
